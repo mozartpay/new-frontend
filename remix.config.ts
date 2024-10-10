@@ -1,11 +1,18 @@
+import { getServerBuildDirectory } from "@remix-run/dev/dist/vite/plugin";
+
 /** @type {import('@remix-run/dev').AppConfig} */
 export default {    
-  ignoredRouteFiles: ["**/.*"],
+  // ignoredRouteFiles: ["**/.*"],
   appDirectory: "app",
-  assetsBuildDirectory: "public/build",
-  serverBuildPath: "build/server/index.js",
+  browserBuildDirectory: "public/build",
   publicPath: "/build/",
-  serverModuleFormat: "cjs",
+  getServerBuildDirectory: "netlify/functions/server/build",
+  assetsBuildDirectory: "build",
+  serverBuildPath: "build/server/index.js",
+  devServerPort: 8888,
+  
+    // serverModuleFormat: "cjs",
+  
   // Removed 'disable-css-side-effects' plugin to resolve build errors
   plugins: [/* other plugins */],
 };
