@@ -1,0 +1,218 @@
+/* Global styles */
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    background-color: var(--background-color);
+    color: var(--text-color);
+}
+
+.toggle-button {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background-color: var(--button-background-color);
+    color: var(--button-text-color);
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Light mode variables */
+body.light-mode {
+    --background-color: #f7fafc;
+    --text-color: #2d3748; /* Darker text color for better contrast */
+    --title-color: #1a202c; /* Darker title color for better contrast */
+    --highlight-color: #F56565;
+    --card-background-color: #ffffff; /* Lighter card background for better contrast */
+    --button-background-color: #4a5568;
+    --button-text-color: #f7fafc;
+}
+
+/* Dark mode variables */
+body.dark-mode {
+    --background-color: #2d3748;
+    --text-color: #e2e8f0; /* Lighter text color for better contrast */
+    --title-color: #edf2f7; /* Lighter title color for better contrast */
+    --highlight-color: #F56565;
+    --card-background-color: #1a202c;
+    --button-background-color: #4a5568;
+    --button-text-color: #f7fafc;
+}
+
+.price-wrapper {
+    flex: 1 1 300px;
+    margin-bottom: 16px;
+    box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+    border: 1px solid lightgray;
+    border-radius: 16px;
+    max-width: 400px;
+    background-color: var(--card-background-color);
+}
+
+.pricing-container {
+    padding: 48px 0;
+    background-color: var(--background-color);
+    color: var(--text-color);
+}
+
+.pricing-header {
+    text-align: center;
+    margin-bottom: 32px;
+}
+
+.pricing-title {
+    font-size: 3rem;
+    font-weight: bold;
+    color: var(--title-color);
+}
+
+.pricing-subtitle {
+    font-size: 1.125rem;
+    color: var(--text-color);
+}
+
+.pricing-cards {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 32px;
+    padding: 32px 0;
+    flex-wrap: wrap;
+}
+
+.plan-header {
+    padding: 24px;
+    text-align: center;
+}
+
+.plan-type, .plan-currency, .plan-amount {
+    color: var(--title-color);
+}
+
+.plan-type {
+    font-weight: 500;
+    font-size: 2rem;
+}
+
+.plan-price {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+}
+
+.plan-currency {
+    font-size: 2rem;
+    font-weight: 600;
+}
+
+.plan-amount {
+    font-size: 3rem;
+    font-weight: 900;
+}
+
+.plan-duration {
+    font-size: 2rem;
+    color: gray;
+}
+
+.plan-body {
+    background-color: var(--card-background-color);
+    padding: 24px;
+    border-bottom-left-radius: 16px;
+    border-bottom-right-radius: 16px;
+}
+
+.plan-features {
+    list-style-type: none;
+    padding-left: 0;
+    margin-bottom: 16px;
+    color: var(--text-color);
+}
+
+.plan-feature {
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+}
+
+.feature-icon {
+    color: green;
+    margin-right: 8px;
+}
+
+.plan-action {
+    width: 80%;
+    margin: 0 auto;
+}
+
+.start-trial-button {
+    width: 80%; /* Set width to 80% */
+    padding: 16px 32px; /* Increased padding */
+    font-size: 1.25rem; /* Increased font size */
+    font-weight: 600;
+    border-radius: 9999px;
+    background-color: #F56565;
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease-in-out;
+    text-align: center; /* Center the text */
+}
+
+.start-trial-button:hover {
+    background-color: #E53E3E;
+    transform: scale(1.05);
+}
+
+.start-trial-button:active {
+    transform: scale(0.95);
+}
+
+.button-container {
+    width: 80%;
+    margin: 0 auto;
+}
+
+/* Styles for HeroDocs component */
+.container {
+    max-width: 48rem;
+    margin: 0 auto;
+    text-align: center;
+    padding: 2.5rem 0;
+    font-family: Arial, sans-serif;
+    color: #2D3748;
+}
+
+.header {
+    font-weight: 600;
+    font-size: 3rem;
+    line-height: 110%;
+    margin-bottom: 1rem;
+}
+
+.paragraph {
+    color: #718096;
+    font-size: 1rem;
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+}
+
+.highlight {
+    color: #38A169;
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.link {
+    color: #3182CE;
+    text-decoration: none;
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+    display: block;
+}

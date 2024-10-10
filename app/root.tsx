@@ -4,25 +4,52 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
 } from "@remix-run/react";
-import type { LinksFunction } from "@remix-run/node";
+import type { LoaderFunction } from "@remix-run/node";
+import LayoutComponent from "./components/layout";
+import { UserProvider } from '~/context/UserContext';
+import { decrypt } from '~/utils/encryption';
+import { createCookie } from "@remix-run/node";
 
-import "./tailwind.css";
+const userCookie = createCookie("user", {
+  maxAge: 60 * 6000, // 60 minutes in seconds
+  secure: process.env.NODE_ENV === "production",
+  httpOnly: true,
+  sameSite: "lax",
+});
 
-export const links: LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
-  {
-    rel: "preconnect",
-    href: "https://fonts.gstatic.com",
-    crossOrigin: "anonymous",
-  },
-  {
-    rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
-  },
-];
+// Links for global CSS or other resources
+export function links() {
+  return [{ rel: "stylesheet", href: "../app/styles/global.css" }];
+}
+// Global loader
+export const loader: LoaderFunction = async ({ request }) => {
+  const cookieHeader = request.headers.get("Cookie");
+  const userCookieValue = await userCookie.parse(cookieHeader);
+  
+  let user = null;
+  if (userCookieValue) {
+    try {
+      const decryptedUser = decrypt(userCookieValue);
+      user = decryptedUser ? JSON.parse(decryptedUser) : null;
+      // Ensure the user object has all the necessary fields
+      user = {
+        ...user,
+        preferredCurrency: user.preferredCurrency || '',
+        publicKeyXlm: user.publicKeyXlm || '',
+        image: user.image || '',
+      };
+    } catch (error) {
+      console.error('Error parsing decrypted user data:', error);
+    }
+  }
+  return { user };
+};
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const { user } = useLoaderData<{ user: any }>();
+  
   return (
     <html lang="en">
       <head>
@@ -32,7 +59,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        {children}
+        <UserProvider initialUser={user}>
+          <LayoutComponent>
+            {children}
+          </LayoutComponent>
+        </UserProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -40,6 +71,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Error boundary to catch unexpected errors
+export function ErrorBoundary({ error }: { error: Error }) {
+  return (
+    <div>
+      <h1>Application Error</h1>
+      <p>{error?.message || "An unexpected error occurred."}</p> {/* Add a fallback message */}
+    </div>
+  );
+}
+
 export default function App() {
-  return <Outlet />;
+  return (
+
+      <Outlet />
+
+  );
 }

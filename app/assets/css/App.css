@@ -1,0 +1,94 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&display=swap");
+body {
+  font-family: "DM Sans", sans-serif;
+}
+
+option {
+  color: black;
+}
+
+/* Add these new styles for the user profile */
+.user-profile {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.user-profile h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.user-profile label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #555;
+}
+
+.user-profile input[type="text"],
+.user-profile input[type="password"],
+.user-profile select {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+}
+
+.user-profile select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23333' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+
+.user-profile button {
+  background-color: #007bff;
+  color: white;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s;
+}
+
+.user-profile button:hover {
+  background-color: #0056b3;
+}
+
+.user-profile .key-field {
+  background-color: #e9ecef;
+  padding: 10px;
+  border-radius: 4px;
+  font-family: monospace;
+  margin-bottom: 15px;
+  word-break: break-all;
+}
+
+.user-profile .copy-button {
+  background-color: #6c757d;
+  padding: 5px 10px;
+  font-size: 14px;
+  margin-left: 10px;
+}
+
+.user-profile .copy-button:hover {
+  background-color: #5a6268;
+}
+
+.user-profile .show-hide-button {
+  background-color: #28a745;
+  padding: 5px 10px;
+  font-size: 14px;
+}
+
+.user-profile .show-hide-button:hover {
+  background-color: #218838;
+}

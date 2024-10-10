@@ -1,0 +1,85 @@
+/* Add these styles to your CSS file or a <style> tag */
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #f9f9f9;
+    padding: 2rem;
+}
+
+.stack {
+    background: white;
+    padding: 3rem;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.heading {
+    font-size: 3rem;
+    font-weight: bold;
+    color: #333;
+    letter-spacing: 2px;
+    margin-bottom: 2rem;
+}
+
+.text {
+    font-size: 1.2rem;
+    line-height: 1.7;
+    color: #555;
+}
+
+.text a {
+    color: #007BFF;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.text a:hover {
+    text-decoration: underline;
+}
+
+span {
+    display: inline-block;
+}
+
+.container.night-mode {
+    background-color: #2c3e50; /* Example night mode background */
+    color: #ecf0f1; /* Example night mode text color */
+}
+
+.container.day-mode {
+    background-color: #ffffff; /* Day mode background */
+    color: #000000; /* Day mode text color */
+}
+
+.stack.night-mode {
+    background: #34495e; /* Night mode stack background */
+    color: #ecf0f1; /* Night mode stack text color */
+}
+
+.stack.day-mode {
+    background: white; /* Day mode stack background */
+    color: #000000; /* Day mode stack text color */
+}
+
+.toggle-button {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    padding: 10px 20px;
+    background-color: #555;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.toggle-button:hover {
+    background-color: #333;
+}
+
+/* Add other specific styles as needed */

@@ -5,8 +5,11 @@
     "**/.server/**/*.ts",
     "**/.server/**/*.tsx",
     "**/.client/**/*.ts",
-    "**/.client/**/*.tsx"
-  ],
+    "**/.client/**/*.tsx",
+    "remix.env.d.ts",
+    "remix.config.ts", 
+    "netlify-edge-plugin.ts"
+, "netlify/functions/server/index.js"  ],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "types": ["@remix-run/node", "vite/client"],
