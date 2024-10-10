@@ -1,1 +1,3 @@
 /* /index.html 200
+# Redirect all requests to the Remix app
+/* /.netlify/functions/server 200
