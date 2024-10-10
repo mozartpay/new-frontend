@@ -8,6 +8,7 @@
   functions = "netlify/functions"
   publish = "build/client"
   port = 3000
+  framework = "vite"
 
 [[redirects]]
   from = "/*"
