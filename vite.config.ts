@@ -1,6 +1,7 @@
 import { vitePlugin as remix } from "@remix-run/dev";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+import { netlifyPlugin } from "@netlify/remix-adapter/plugin";
 // import { cssSideEffects } from 'vite-plugin-css-side-effects'; // Commented out
 
 export default defineConfig({
@@ -12,6 +13,7 @@ export default defineConfig({
         v3_throwAbortReason: true,
       },
     }),
+    netlifyPlugin(),
     tsconfigPaths(),
     // cssSideEffects(), // Commented out
   ],

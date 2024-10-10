@@ -11,9 +11,10 @@
     "typecheck": "tsc"
   },
   "dependencies": {
-    "@netlify/functions": "^0.10.0",
+    "@netlify/functions": "^2.8.1",
+    "@netlify/remix-adapter": "^2.5.1",
+    "@netlify/remix-runtime": "^2.3.1",
     "@prisma/client": "^5.20.0",
-    "@remix-run/netlify": "^1.19.3",
     "@remix-run/node": "^2.12.1",
     "@remix-run/react": "^2.12.1",
     "@remix-run/serve": "^2.12.1",
@@ -48,6 +49,6 @@
     "vite-tsconfig-paths": "^4.2.1"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=18.0.0"
   }
 }
