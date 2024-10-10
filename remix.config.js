@@ -1,14 +1,11 @@
-import { getServerBuildDirectory } from "@remix-run/dev/dist/vite/plugin";
-
-/** @type {import('@remix-run/dev').AppConfig} */
-export default {    
+module.exports = {    
   // ignoredRouteFiles: ["**/.*"],
   appDirectory: "app",
-  browserBuildDirectory: "public/build",
+  browserBuildDirectory: "/build/client",
   publicPath: "/build/",
   getServerBuildDirectory: "netlify/functions/server/build",
-  assetsBuildDirectory: "build",
-  serverBuildPath: "build/server/index.js",
+  assetsBuildDirectory: "/build",
+  serverBuildPath: "/build/server/index.js",
   devServerPort: 8888,
   
     // serverModuleFormat: "cjs",

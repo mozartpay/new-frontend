@@ -7,7 +7,7 @@
     "**/.client/**/*.ts",
     "**/.client/**/*.tsx",
     "remix.env.d.ts",
-    "remix.config.ts", 
+    "remix.config.js", 
     "netlify-edge-plugin.ts"
 , "netlify/functions/server/index.js"  ],
   "compilerOptions": {
