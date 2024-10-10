@@ -1,6 +1,8 @@
 [build]
   functions = "netlify/functions"
   publish = "build/client"
+  node_version = "20.x"
+  
 
 [dev]
   functions = "netlify/functions"
