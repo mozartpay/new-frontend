@@ -1,11 +1,11 @@
 module.exports = {    
   // ignoredRouteFiles: ["**/.*"],
   appDirectory: "app",
-  browserBuildDirectory: "/build/client",
-  publicPath: "/build/",
-  getServerBuildDirectory: "/build/server",
-  assetsBuildDirectory: "/build",
-  serverBuildPath: "/build/server/index.js",
+  browserBuildDirectory: "/public/build/client",
+  publicPath: "/public/build/",
+  getServerBuildDirectory: "/public/build/server",
+  assetsBuildDirectory: "/public/build",
+  serverBuildPath: "/public/build/server/index.js",
   devServerPort: 8888,
   
     // serverModuleFormat: "cjs",
