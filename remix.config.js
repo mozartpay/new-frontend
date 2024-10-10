@@ -3,7 +3,7 @@ module.exports = {
   appDirectory: "app",
   browserBuildDirectory: "/build/client",
   publicPath: "/build/",
-  getServerBuildDirectory: "netlify/functions/server/build",
+  getServerBuildDirectory: "/build/server",
   assetsBuildDirectory: "/build",
   serverBuildPath: "/build/server/index.js",
   devServerPort: 8888,
