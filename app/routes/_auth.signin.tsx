@@ -26,7 +26,7 @@ export const action: ActionFunction = async ({ request }) => {
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
     // Ensure no double slashes in the URL
-    const apiUrl = `${process.env.API_URL}/signin`.replace(/([^:]\/)\/+/g, "$1");
+    const apiUrl = `${process.env.API_URL}/signin`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
