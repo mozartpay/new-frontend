@@ -43,7 +43,7 @@ function SignUp() {
     }
 
     try {
-      const response = await fetch("https://mozart-api-21ea5fd801a8.herokuapp.com/api/signup/", {
+      const response = await fetch(`${process.env.API_URL}/signup/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

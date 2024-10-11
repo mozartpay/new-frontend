@@ -4,6 +4,7 @@ import { json, redirect, ActionFunction, LoaderFunction } from '@remix-run/node'
 import { getSession, commitSession } from '~/sessions';
 import { encrypt } from '~/utils/encryption';
 import { useUser } from '~/context/UserContext';
+import invariant from 'tiny-invariant';
 
 export const loader: LoaderFunction = async ({ request }) => {
   const session = await getSession(request.headers.get("Cookie"));
@@ -18,11 +19,16 @@ export const action: ActionFunction = async ({ request }) => {
   const email = form.get('email');
   const password = form.get('password');
 
+  invariant(process.env.API_URL, "API_URL must be set");
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-    const response = await fetch('https://mozart-api-21ea5fd801a8.herokuapp.com/api/signin/', {
+    // Ensure no double slashes in the URL
+    const apiUrl = `${process.env.API_URL}/signin`.replace(/([^:]\/)\/+/g, "$1");
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -34,29 +40,33 @@ export const action: ActionFunction = async ({ request }) => {
 
     clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      return json({ error: errorData.message || "An error occurred during sign-in" }, { status: response.status });
+    const responseText = await response.text();
+    console.log('Raw server response:', responseText); // Log the raw response
+
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (error) {
+      console.error('Failed to parse response as JSON:', responseText);
+      return json({ error: 'Unexpected server response. Please try again later.' });
     }
 
-    const data = await response.json();
-    const session = await getSession();
-    session.set("user", encrypt(JSON.stringify(data.user)));
+    if (response.ok) {
+      const session = await getSession(request.headers.get("Cookie"));
+      const encryptedUser = encrypt(JSON.stringify(data.user));
+      session.set("user", encryptedUser);
 
-    return json(
-      { success: true },
-      {
+      return redirect("/admin", {
         headers: {
           "Set-Cookie": await commitSession(session),
         },
-      }
-    );
-  } catch (error) {
-    console.error('Sign-in error:', error);
-    if (error.name === 'AbortError') {
-      return json({ error: "The request timed out. Please try again." }, { status: 408 });
+      });
+    } else {
+      return json({ error: data.message || 'Invalid email or password' });
     }
-    return json({ error: "An unexpected error occurred. Please try again later." }, { status: 500 });
+  } catch (error) {
+    console.error('Signin error:', error);
+    return json({ error: 'An error occurred during sign in. Please try again.' });
   }
 };
 

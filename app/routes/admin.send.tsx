@@ -72,7 +72,7 @@ export default function AdminSend() {
   const fetchBalances = async () => {
     try {
       const response = await axios.get(
-        `https://mozart-api-21ea5fd801a8.herokuapp.com/api/balance?email=${encodeURIComponent(user.email)}`
+        `${process.env.API_URL}/balance?email=${encodeURIComponent(user.email)}`
       );
       const apiBalances = response.data.balances || [];
 
@@ -114,7 +114,7 @@ export default function AdminSend() {
     setIsSending(true);
     try {
       const response = await axios.post(
-        'https://mozart-api-21ea5fd801a8.herokuapp.com/api/send',
+        `${process.env.API_URL}/send`,
         {
           senderEmail: user.email,
           amount: amount.toString(),

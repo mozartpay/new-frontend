@@ -87,7 +87,7 @@ export default function AdminRequest() {
     setIsRequesting(true);
     try {
       const response = await axios.post(
-        'https://mozart-api-21ea5fd801a8.herokuapp.com/api/request',
+        `${process.env.API_URL}/request`,
         {
           senderEmail: user.email,
           amount: amount.toString(),

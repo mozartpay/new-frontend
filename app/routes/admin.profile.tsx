@@ -76,7 +76,7 @@ export default function AdminProfile() {
 
   const fetchUserData = async () => {
     try {
-      const response = await axios.get(`https://mozart-api-21ea5fd801a8.herokuapp.com/api/profile/${user.email}`);
+      const response = await axios.get(`${process.env.API_URL}/profile/${user.email}`);
       const userData = response.data;
       setUser({ ...user, ...userData });
       setUserImage(userData.image || null);
@@ -104,7 +104,7 @@ export default function AdminProfile() {
         try {
           setLoadingPrivateKey(true);
           const response = await axios.post(
-            'https://mozart-api-21ea5fd801a8.herokuapp.com/api/xlm/decrypt',
+            `${process.env.API_URL}/xlm/decrypt`,
             {
               email: user.email,
             },
@@ -133,7 +133,7 @@ export default function AdminProfile() {
     const newPreferredCurrency = event.target.value;
     
     try {
-      const response = await axios.post('https://mozart-api-21ea5fd801a8.herokuapp.com/api/profile/preferredCurrency', {
+      const response = await axios.post(`${process.env.API_URL}/profile/preferredCurrency`, {
         email: user.email,
         preferredCurrency: newPreferredCurrency
       });
@@ -162,7 +162,7 @@ export default function AdminProfile() {
       reader.onloadend = async () => {
         const base64Image = reader.result as string;
         try {
-          const response = await axios.post('https://mozart-api-21ea5fd801a8.herokuapp.com/api/profile/image', {
+          const response = await axios.post(`${process.env.API_URL}/profile/image`, {
             email: user.email,
             image: base64Image
           });

@@ -61,7 +61,7 @@ export default function Footer({ isDarkMode, onToggleDarkMode }: { isDarkMode: b
     }
 
     try {
-      const response = await fetch('https://mozart-api-21ea5fd801a8.herokuapp.com/api/subscribe', { // Update with your backend URL
+      const response = await fetch(`${process.env.API_URL}/subscribe`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

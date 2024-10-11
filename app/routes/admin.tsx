@@ -55,7 +55,7 @@ export default function Admin() {
       setError(null);
       axios({
         method: 'get',
-        url: `https://mozart-api-21ea5fd801a8.herokuapp.com/api/balance?email=${encodeURIComponent(user.email)}`,
+        url: `${import.meta.env.VITE_API_URL}/balance?email=${encodeURIComponent(user.email)}`,
         headers: {
           'Content-Type': 'application/json',
         },

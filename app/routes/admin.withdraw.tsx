@@ -66,10 +66,18 @@ export default function AdminWithdraw() {
   const fetchBalances = async () => {
     try {
       const response = await axios.get(
-        `https://mozart-api-21ea5fd801a8.herokuapp.com/api/balance?email=${encodeURIComponent(user.email)}`,
+        `${process.env.API_URL}/balance?email=${encodeURIComponent(user.email)}`,
         { headers: { 'Content-Type': 'application/json' } }
       );
-      setBalances(response.data.balances || []);
+      const apiBalances = response.data.balances || [];
+
+      const formattedBalances: { [key: string]: string } = {};
+      apiBalances.forEach((balance: any) => {
+        const currency = balance.asset_code || 'XLM';
+        formattedBalances[currency] = balance.balance;
+      });
+
+      setBalances(formattedBalances);
     } catch (error) {
       console.error('Error fetching balances:', error);
       setError('Failed to fetch balances. Please try again later.');

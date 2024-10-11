@@ -73,7 +73,7 @@ export default function AdminAdd() {
     try {
       setLoading(true);
       const response = await axios.get(
-        `https://mozart-api-21ea5fd801a8.herokuapp.com/api/balance?email=${user.email}`,
+        `${process.env.API_URL}/balance?email=${user.email}`,
         { headers: { 'Content-Type': 'application/json' } }
       );
 
@@ -112,14 +112,14 @@ export default function AdminAdd() {
         case 'USD':
         case 'EUR':
           response = await axios.post(
-            'https://mozart-api-21ea5fd801a8.herokuapp.com/api/trustline',
+            `${process.env.API_URL}/trustline`,
             { email: user.email, currency },
             { headers: { 'Content-Type': 'application/json', Accept: '*/*' } }
           );
           break;
         case 'XLM':
           response = await axios.post(
-            'https://mozart-api-21ea5fd801a8.herokuapp.com/api/xlm/',
+            `${process.env.API_URL}/xlm/`,
             { email: user.email, currency: 'XLM' },
             { headers: { 'Content-Type': 'application/json', Accept: 'application/json' } }
           );

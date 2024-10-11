@@ -72,7 +72,7 @@ export default function AdminIdentity() {
     formData.append('email', user.email);
 
     try {
-      const response = await axios.post('https://mozart-api-21ea5fd801a8.herokuapp.com/api/identity', formData, {
+      const response = await axios.post(`${process.env.API_URL}/identity`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

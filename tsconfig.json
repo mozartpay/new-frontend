@@ -6,7 +6,7 @@
     "**/.server/**/*.tsx",
     "**/.client/**/*.ts",
     "**/.client/**/*.tsx",
-    "remix.env.d.ts",
+    "env.d.ts",
     "remix.config.js", 
     "netlify-edge-plugin.ts"
 , "netlify/functions/server/index.js"  ],

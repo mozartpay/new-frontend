@@ -7,9 +7,7 @@ module.exports = {
   assetsBuildDirectory: "/public/build",
   serverBuildPath: "/public/build/server/index.js",
   devServerPort: 8888,
-  
-    // serverModuleFormat: "cjs",
-  
-  // Removed 'disable-css-side-effects' plugin to resolve build errors
+  serverEnvironmentVariables: ["API_URL", "ENCRYPTION_KEY", "SESSION_SECRET"],
+  serverModuleFormat: "cjs",
   plugins: [/* other plugins */],
 };

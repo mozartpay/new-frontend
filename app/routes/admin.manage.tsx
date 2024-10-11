@@ -64,7 +64,7 @@ export default function AdminManage() {
 
   const fetchRequests = async () => {
     try {
-      const response = await axios.get(`https://mozart-api-21ea5fd801a8.herokuapp.com/api/request/receiver/${user.email}`);
+      const response = await axios.get(`${process.env.API_URL}/request/receiver/${user.email}`);
       const filteredRequests = response.data.filter((request: PaymentRequest) => request.receiverEmail === user.email);
       setPaymentRequests(filteredRequests);
     } catch (error) {
@@ -76,7 +76,7 @@ export default function AdminManage() {
   const handleAction = async (action: 'accept' | 'decline', requestId: string) => {
     setLoading(true);
     try {
-      const response = await axios.patch(`https://mozart-api-21ea5fd801a8.herokuapp.com/api/request/${requestId}`, {
+      const response = await axios.patch(`${process.env.API_URL}/request/${requestId}`, {
         status: action === 'accept' ? 'accepted' : 'declined',
       });
 
