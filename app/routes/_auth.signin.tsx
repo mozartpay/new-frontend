@@ -1,38 +1,50 @@
-import React, { useState, ChangeEvent, useEffect } from 'react';
-import { Link, useNavigate, Form, useActionData, useNavigation } from '@remix-run/react';
-import { json, redirect, ActionFunction, LoaderFunction } from '@remix-run/node';
-import { getSession, commitSession } from '~/sessions';
-import { encrypt } from '~/utils/encryption';
+import React, { useState, useEffect } from 'react';
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useNavigate, Link } from '@remix-run/react';
+import { json, LoaderFunction, ActionFunction, redirect } from '@remix-run/node';
+import { createUserSession, getUserFromSession } from '~/sessions/index';
 import { useUser } from '~/context/UserContext';
-import invariant from 'tiny-invariant';
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const session = await getSession(request.headers.get("Cookie"));
-  if (session.has("user")) {
-    return redirect("/admin");
+  const user = await getUserFromSession(request);
+  if (user) {
+    return redirect('/admin');
   }
-  return null;
+
+  // Check for the presence of a login cookie
+  const cookieHeader = request.headers.get("Cookie");
+  const loginCookie = await getUserFromSession(request);
+  
+  if (loginCookie) {
+    // If the login cookie exists, create a user session and redirect to admin
+    return createUserSession(JSON.stringify(loginCookie), '/admin');
+  }
+
+  const apiUrl = process.env.API_URL;
+  if (!apiUrl) {
+    console.error("API_URL is not defined");
+    return json({ message: "API_URL is not configured properly", error: true }, { status: 500 });
+  }
+  return json({ apiUrl, message: "Signin page loaded successfully", error: false });
 };
 
 export const action: ActionFunction = async ({ request }) => {
-  const form = await request.formData();
-  const email = form.get('email');
-  const password = form.get('password');
+  const formData = await request.formData();
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
 
-  invariant(process.env.API_URL, "API_URL must be set");
+  const apiUrl = process.env.API_URL;
+  if (!apiUrl) {
+    return json({ error: "API_URL is not configured properly" }, { status: 500 });
+  }
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-    // Ensure no double slashes in the URL
-    const apiUrl = `${process.env.API_URL}/signin`;
-
-    const response = await fetch(apiUrl, {
+    const response = await fetch(`${apiUrl}/signin`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Accept': 'application/json'
       },
       body: JSON.stringify({ email, password }),
       signal: controller.signal,
@@ -40,65 +52,66 @@ export const action: ActionFunction = async ({ request }) => {
 
     clearTimeout(timeoutId);
 
-    const responseText = await response.text();
-    console.log('Raw server response:', responseText); // Log the raw response
-
-    let data;
-    try {
-      data = JSON.parse(responseText);
-    } catch (error) {
-      console.error('Failed to parse response as JSON:', responseText);
-      return json({ error: 'Unexpected server response. Please try again later.' });
-    }
+    const data = await response.json();
 
     if (response.ok) {
-      const session = await getSession(request.headers.get("Cookie"));
-      const encryptedUser = encrypt(JSON.stringify(data.user));
-      session.set("user", encryptedUser);
-
-      return redirect("/admin", {
-        headers: {
-          "Set-Cookie": await commitSession(session),
-        },
-      });
+      const userWithAuth = { 
+        ...data.user, 
+        isAuthorized: true,
+        token: data.token 
+      };
+      // Create user session with token and user data
+      return createUserSession(JSON.stringify(userWithAuth), '/admin');
     } else {
-      return json({ error: data.message || 'Invalid email or password' });
+      return json({ error: data.message || 'An error occurred during sign in' }, { status: response.status });
     }
   } catch (error) {
-    console.error('Signin error:', error);
-    return json({ error: 'An error occurred during sign in. Please try again.' });
+    console.error('Login error:', error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      return json({ error: 'The request timed out. Please try again.' }, { status: 408 });
+    }
+    return json({ error: 'An unexpected error occurred. Please try again.' }, { status: 500 });
   }
 };
 
-function SignIn() {
-  const [show, setShow] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const navigate = useNavigate();
-  const { user, setUser } = useUser();
+export default function SignIn() {
+  const loaderData = useLoaderData<{ message: string, error: boolean, apiUrl: string }>();
   const actionData = useActionData<{ error?: string }>();
   const navigation = useNavigation();
-
-  const isLoading = navigation.state === "submitting";
+  const [show, setShow] = useState(false);
+  const submit = useSubmit();
+  const { setUser } = useUser();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    if (user && user.isAuthorized) {
-      navigate('/admin');
+    if (actionData && !actionData.error) {
+      // The user data is now handled by the server-side redirect
+      // No need to manually set the user or navigate here
     }
-  }, [user, navigate]);
+  }, [actionData, setUser, navigate]);
 
   const handleClick = () => setShow(!show);
+
+  const isSubmitting = navigation.state === "submitting";
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    submit(event.currentTarget, { method: 'post', replace: true });
+  };
 
   return (
     <div style={{ maxWidth: '400px', margin: '0 auto', padding: '2rem', textAlign: 'center' }}>
       <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Sign In</h1>
-      <p style={{ marginBottom: '1.5rem', color: 'gray' }}>Enter your email and password to sign in!</p>
       
-      {actionData?.error && (
-        <p style={{ color: 'red', marginBottom: '1rem' }}>{actionData.error}</p>
+      {loaderData.error ? (
+        <p style={{ color: 'red', marginBottom: '1rem' }}>{loaderData.message}</p>
+      ) : (
+        <p style={{ marginBottom: '1.5rem', color: 'gray' }}>Enter your email and password to sign in!</p>
       )}
-
-      <Form method="post">
+      
+      {actionData?.error && <p style={{ color: 'red', marginBottom: '1rem' }}>{actionData.error}</p>}
+      
+      <Form method="post" onSubmit={handleSubmit}>
         <div>
           <label htmlFor="email" style={{ display: 'block', marginBottom: '0.5rem', textAlign: 'left' }}>
             Email <span style={{ color: 'red' }}>*</span>
@@ -108,8 +121,6 @@ function SignIn() {
             name="email"
             type="email"
             placeholder="mail@example.com"
-            value={email}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
             style={{
               width: '100%',
               padding: '0.75rem',
@@ -131,8 +142,6 @@ function SignIn() {
               name="password"
               type={show ? "text" : "password"}
               placeholder="Min. 8 characters"
-              value={password}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -160,79 +169,35 @@ function SignIn() {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
           <label style={{ display: 'flex', alignItems: 'center' }}>
-            <input type="checkbox" style={{ marginRight: '0.5rem' }} /> Keep me logged in
+            <input type="checkbox" name="remember" style={{ marginRight: '0.5rem' }} />
+            Remember me
           </label>
-          <Link to="/forgot_password" style={{ color: '#f56565' }}>
-            Forgot password?
-          </Link>
+          <Link to="/forgot-password" style={{ color: '#4a5568', textDecoration: 'none' }}>Forgot Password?</Link>
         </div>
 
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isSubmitting}
           style={{
             width: '100%',
             padding: '0.75rem',
-            backgroundColor: isLoading ? '#ccc' : '#f56565',
+            backgroundColor: isSubmitting ? '#ccc' : '#f56565',
             color: 'white',
             border: 'none',
             borderRadius: '5px',
-            cursor: isLoading ? 'not-allowed' : 'pointer',
+            cursor: isSubmitting ? 'not-allowed' : 'pointer',
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
           }}
         >
-          {isLoading ? (
-            <>
-              <Spinner />
-              <span style={{ marginLeft: '0.5rem' }}>Signing In...</span>
-            </>
-          ) : (
-            'Sign In'
-          )}
+          {isSubmitting ? 'Signing In...' : 'Sign In'}
         </button>
       </Form>
 
-      <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-        <p>
-          Not registered yet?{' '}
-          <Link to="/signup" style={{ color: '#f56565' }}>
-            Create an Account
-          </Link>
-        </p>
-      </div>
+      <p style={{ marginTop: '1rem' }}>
+        Don't have an account? <Link to="/signup" style={{ color: '#4a5568', textDecoration: 'none' }}>Sign up</Link>
+      </p>
     </div>
   );
 }
-
-function Spinner() {
-  return (
-    <svg
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ animation: 'spin 1s linear infinite' }}
-    >
-      <style>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        strokeDasharray="31.4 31.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-export default SignIn;

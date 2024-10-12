@@ -10,7 +10,7 @@ const ArticleList = () => (
       <div className="article">
         <div className="article-image" style={{ width: '50%' }}>
           <motion.img
-            src="https://images.unsplash.com/photo-1499951360447-b19be8fe80f5?ixlib=rb-1.2.1&ixid=MXwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHw%3D&auto=format&fit=crop&w=800&q=80"
+            src="https://i.imgur.com/wJVetRT.jpeg"
             alt="some good alt text"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -33,7 +33,7 @@ const ArticleList = () => (
           <div className="article-image" style={{ width: '50%' }}>
             <a href="/blog/mozartpay" className="custom-link">
               <motion.img
-                src="https://i.imgur.com/pxwIAOW.png"
+                src="https://i.imgur.com/Jk9jSmH.png"
                 alt="Mozart"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}

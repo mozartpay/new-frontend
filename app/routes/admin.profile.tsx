@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLoaderData, useFetcher } from '@remix-run/react';
-import { json, LoaderFunction, ActionFunction } from '@remix-run/node';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useFetcher, useLoaderData, redirect } from '@remix-run/react';
+import { json, ActionFunction, LoaderFunction } from '@remix-run/node';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getSession, commitSession } from '~/sessions';
+import { getSession, commitSession, getUserFromSession } from '~/sessions';
 import { decrypt, encrypt } from '~/utils/encryption';
 import { useUser } from '~/context/UserContext';
 import axios from 'axios';
@@ -10,81 +10,104 @@ import "~/styles/admin.css";
 
 // Import your images
 import banner from '~/assets/img/auth/banner.png';
-import avatar from '~/assets/img/avatars/avatar4.png';
+import avatar from '~/assets/img/avatars/avatar2.png';
+
+// Add this import at the top of the file
+
 
 const DEFAULT_CURRENCIES = ['XLM', 'USDC', 'EURC'];
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const session = await getSession(request.headers.get("Cookie"));
-  const userJson = session.get("user");
-
-  if (!userJson) {
-    return json({ user: null, apiUrl: process.env.API_URL });
+  const user = await getUserFromSession(request);
+  
+  if (!user) {
+    return redirect("/signin");
   }
 
   try {
-    const decryptedUser = decrypt(userJson);
-    const user = JSON.parse(decryptedUser);
-    return json({ user, apiUrl: process.env.API_URL });
+    if (!user.email || !user.isAuthorized) {
+      return redirect("/signin");
+    }
+
+    const apiUrl = process.env.API_URL;
+    if (!apiUrl) {
+      throw new Error("API_URL is not configured");
+    }
+
+    return json({ 
+      success: true, 
+      user,
+      apiUrl
+    });
   } catch (error) {
-    console.error("Error decrypting user data:", error);
-    return json({ user: null, apiUrl: process.env.API_URL });
+    console.error("Error processing user data:", error);
+    return redirect("/signin");
   }
 };
 
 export const action: ActionFunction = async ({ request }) => {
-  const session = await getSession(request.headers.get("Cookie"));
-  const formData = await request.formData();
-  const preferredCurrency = formData.get("preferredCurrency") as string;
+    const session = await getSession(request);
+    const formData = await request.formData();
+    const preferredCurrency = formData.get("preferredCurrency") as string;
 
-  let user = JSON.parse(decrypt(session.get("user")));
-  user.preferredCurrency = preferredCurrency;
-  session.set("user", encrypt(JSON.stringify(user)));
+    let user = JSON.parse(decrypt(session.get("user")));
+    user.preferredCurrency = preferredCurrency;
+    session.set("user", encrypt(JSON.stringify(user)));
 
-  return json({ success: true, preferredCurrency }, {
-    headers: {
-      "Set-Cookie": await commitSession(session),
-    },
-  });
+    return json({ success: true, preferredCurrency }, {
+        headers: {
+            "Set-Cookie": await commitSession(session),
+        },
+    });
 };
 
 export default function AdminProfile() {
-  const { user: loaderUser, apiUrl } = useLoaderData<{ user: any, apiUrl: string }>();
+  const { user: initialUser, apiUrl } = useLoaderData<{ user: User, apiUrl: string }>();
+  const [user, setUser] = useState(initialUser);
   const [privateKey, setPrivateKey] = useState<string | null>(null);
   const [isPrivateKeyBlurred, setIsPrivateKeyBlurred] = useState<boolean>(true);
   const [loadingPrivateKey, setLoadingPrivateKey] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { user, setUser, updatePreferredCurrency } = useUser();
+  const { updatePreferredCurrency } = useUser();
   const fetcher = useFetcher();
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
   const [userImage, setUserImage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loaderUser) {
+    if (!user) {
       navigate('/signin');
-    } else if (!user) {
-      setUser(loaderUser);
     }
-  }, [loaderUser, user, setUser, navigate]);
+  }, [user, navigate]);
 
-  useEffect(() => {
-    if (user && user.email) {
-      fetchUserData();
-    }
-  }, [user]);
+  const fetchUserData = useCallback(async () => {
+    if (!user?.email) return;
 
-  const fetchUserData = async () => {
     try {
       const response = await axios.get(`${apiUrl}/profile/${user.email}`);
       const userData = response.data;
-      setUser({ ...user, ...userData });
-      setUserImage(userData.image || null);
+      
+      setUser(prevUser => {
+        if (JSON.stringify(prevUser) !== JSON.stringify(userData)) {
+          return { ...prevUser, ...userData };
+        }
+        return prevUser;
+      });
+      
+      if (userData.image && userData.image !== userImage) {
+        setUserImage(userData.image);
+      }
     } catch (error) {
       console.error('Error fetching user data:', error);
       setError('Failed to load user data. Please try again later.');
     }
-  };
+  }, [user?.email, userImage, apiUrl]);
+
+  useEffect(() => {
+    if (user?.email) {
+      fetchUserData();
+    }
+  }, [user?.email, fetchUserData]);
 
   const truncateKey = (key: string | null) => {
     if (!key) return '';
@@ -104,7 +127,7 @@ export default function AdminProfile() {
         try {
           setLoadingPrivateKey(true);
           const response = await axios.post(
-            `${apiUrl}/xlm/decrypt`,
+            `${apiUrl}/api/xlm/decrypt`,
             {
               email: user.email,
             },
@@ -133,14 +156,14 @@ export default function AdminProfile() {
     const newPreferredCurrency = event.target.value;
     
     try {
-      const response = await axios.post(`${apiUrl}/profile/preferredCurrency`, {
+      const response = await axios.post(`${apiUrl}/api/profile/preferredCurrency`, {
         email: user.email,
         preferredCurrency: newPreferredCurrency
       });
 
       if (response.data.message === 'Preferred currency updated successfully') {
         updatePreferredCurrency(newPreferredCurrency);
-        setUser({ ...user, preferredCurrency: newPreferredCurrency });
+        setUser(prevUser => ({ ...prevUser, preferredCurrency: newPreferredCurrency }));
         setConfirmationMessage(`Preferred currency set to ${newPreferredCurrency}`);
         
         // Update the session
@@ -162,7 +185,7 @@ export default function AdminProfile() {
       reader.onloadend = async () => {
         const base64Image = reader.result as string;
         try {
-          const response = await axios.post(`${apiUrl}/profile/image`, {
+          const response = await axios.post(`${apiUrl}/api/profile/image`, {
             email: user.email,
             image: base64Image
           });

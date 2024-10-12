@@ -15,7 +15,7 @@ const Hero = () => {
     <section className={isDarkMode ? 'dark-mode' : ''}>
       <h1>Introducing MozartPay: Your Symphony of Seamless Payments</h1>
       <div>
-        <img src="https://i.imgur.com/pxwIAOW.png" alt="some good alt text" style={{ borderRadius: '8px', objectFit: 'contain' }} />
+        <img src="https://i.imgur.com/Jk9jSmH.png" alt="some good alt text" style={{ borderRadius: '8px', objectFit: 'contain' }} />
       </div>
       <div>
         <p>We are thrilled to announce the closed beta launch of MozartPay – your conductor to harmonize day-to-day transactions and unlock access to the new era of payments. Welcome to mozartpay.com!</p>

@@ -1,182 +1,233 @@
-import React, { useState, ChangeEvent, useEffect } from "react";
-import { Link, useNavigate, Form, useActionData } from "@remix-run/react";
-import { json, redirect, ActionFunction, LoaderFunction } from "@remix-run/node";
-import { getSession, commitSession } from "~/sessions";
-import { encrypt } from "~/utils/encryption";
+import React, { useState, useEffect } from "react";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useNavigate, Link } from "@remix-run/react";
+import { json, LoaderFunction, ActionFunction, redirect } from "@remix-run/node";
+import { createUserSession, getSession } from "~/sessions/index";
 import { useUser } from "~/context/UserContext";
+import PhoneInput from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const session = await getSession(request.headers.get("Cookie"));
-  const userJson = session.get("user");
-
-  if (userJson) {
-    return redirect("/admin");
+  const session = await getSession(request);
+  const userId = session.get("userId");
+  if (userId) {
+    return redirect('/admin');
   }
-
-  return null;
+  const apiUrl = process.env.API_URL;
+  if (!apiUrl) {
+    console.error("API_URL is not defined");
+    return json({ message: "API_URL is not configured properly", error: true }, { status: 500 });
+  }
+  return json({ apiUrl, message: "Signup page loaded successfully", error: false });
 };
 
 export const action: ActionFunction = async ({ request }) => {
-  // Implement signup logic here
-  // ...
+  const formData = await request.formData();
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const fullname = formData.get('name') as string;
+  const phone = formData.get('phone') as string;
+
+  const apiUrl = process.env.API_URL;
+  if (!apiUrl) {
+    return json({ error: "API_URL is not configured properly" }, { status: 500 });
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    const response = await fetch(`${apiUrl}/signup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password, fullname, number: phone }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    const data = await response.json();
+
+    if (response.ok) {
+      const userWithAuth = { 
+        ...data.user, 
+        isAuthorized: true,
+        token: data.token 
+      };
+      // Create user session and redirect to verification page
+      return createUserSession(JSON.stringify(userWithAuth), '/verification');
+    } else {
+      return json({ error: data.message || 'An error occurred during sign up' }, { status: response.status });
+    }
+  } catch (error) {
+    console.error('Signup error:', error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      return json({ error: 'The request timed out. Please try again.' }, { status: 408 });
+    }
+    return json({ error: 'An unexpected error occurred. Please try again.' }, { status: 500 });
+  }
 };
 
-function SignUp() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+export default function SignUp() {
+  const loaderData = useLoaderData<{ message: string, error: boolean, apiUrl: string }>();
+  const actionData = useActionData<{ error?: string, user?: any }>();
+  const navigation = useNavigation();
+  const [showPassword, setShowPassword] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const submit = useSubmit();
+  const { setUser } = useUser();
   const navigate = useNavigate();
-  const { user, setUser } = useUser();
-  const actionData = useActionData<{ error?: string }>();
 
   useEffect(() => {
-    if (user && user.isAuthorized) {
-      navigate('/admin');
-    }
-  }, [user, navigate]);
-
-  const handleTogglePasswordVisibility = () => setShowPassword(!showPassword);
-
-  const handleSignUp = async () => {
-    if (password.length < 8) {
-      setErrorMessage("Password must be at least 8 characters.");
-      return;
-    }
-
-    try {
-      const response = await fetch(`${process.env.API_URL}/signup/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({ email, password, fullname, number }),
-      });
-
-      if (response.ok) {
-        const responseData = await response.json();
-        const userData: UserData = responseData.user;
-
-        // localStorage.setItem("user", JSON.stringify(userData));
-        navigate("/verifyAccount"); 
+    if (actionData && !actionData.error && actionData.user) {
+      if (actionData.user.isVerified) {
+        setUser(actionData.user);
+        navigate('/admin');
       } else {
-        const data = await response.json();
-        setErrorMessage(data.message || "Signup failed");
+        navigate('/verification');
       }
-    } catch (error) {
-      setErrorMessage("An error occurred during signup. Please try again.");
     }
-  };
+  }, [actionData, setUser, navigate]);
 
-  const handleChange = (value?: E164Number) => {
-    setNumber(value || '');
-  };
+  const handlePasswordVisibility = () => setShowPassword(!showPassword);
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [fullname, setName] = useState<string>("");
-  const [number, setNumber] = useState<string>("");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isSubmitting = navigation.state === "submitting";
+
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    formData.set('phone', phoneNumber);
+    submit(formData, { method: 'post', replace: true });
+  };
 
   return (
     <div style={{ maxWidth: '400px', margin: '0 auto', padding: '2rem', textAlign: 'center' }}>
       <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Sign Up</h1>
-      <p style={{ marginBottom: '1.5rem', color: 'gray' }}>Enter your name, email, and password to sign up!</p>
-
-      <form onSubmit={(e) => e.preventDefault()}>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label htmlFor="fullname" style={{ display: 'block', marginBottom: '0.5rem', textAlign: 'left' }}>
-            Full Name <span style={{ color: 'red' }}>*</span>
+      
+      {loaderData.error ? (
+        <p style={{ color: 'red', marginBottom: '1rem' }}>{loaderData.message}</p>
+      ) : (
+        <p style={{ marginBottom: '1.5rem', color: 'gray' }}>Create your account to get started!</p>
+      )}
+      
+      {actionData?.error && <p style={{ color: 'red', marginBottom: '1rem' }}>{actionData.error}</p>}
+      
+      <Form method="post" onSubmit={handleSubmit}>
+        <div>
+          <label htmlFor="name" style={{ display: 'block', marginBottom: '0.5rem', textAlign: 'left' }}>
+            Name <span style={{ color: 'red' }}>*</span>
           </label>
           <input
-            id="fullname"
+            id="name"
+            name="name"
             type="text"
-            placeholder="John Doe"
-            value={fullname}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '5px' }}
+            placeholder="Your full name"
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              marginBottom: '1.5rem',
+              border: '1px solid #ccc',
+              borderRadius: '5px',
+            }}
             required
           />
         </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div>
           <label htmlFor="email" style={{ display: 'block', marginBottom: '0.5rem', textAlign: 'left' }}>
             Email <span style={{ color: 'red' }}>*</span>
           </label>
           <input
             id="email"
+            name="email"
             type="email"
             placeholder="mail@example.com"
-            value={email}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
-            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '5px' }}
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              marginBottom: '1.5rem',
+              border: '1px solid #ccc',
+              borderRadius: '5px',
+            }}
             required
           />
         </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div>
+          <label htmlFor="phone" style={{ display: 'block', marginBottom: '0.5rem', textAlign: 'left' }}>
+            Phone Number <span style={{ color: 'red' }}>*</span>
+          </label>
+          <PhoneInput
+            international
+            countryCallingCodeEditable={false}
+            defaultCountry="US"
+            value={phoneNumber}
+            onChange={(value) => setPhoneNumber(value || "")}
+            style={{
+              marginBottom: '1.5rem',
+            }}
+          />
+        </div>
+
+        <div>
           <label htmlFor="password" style={{ display: 'block', marginBottom: '0.5rem', textAlign: 'left' }}>
             Password <span style={{ color: 'red' }}>*</span>
           </label>
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
             <input
               id="password"
+              name="password"
               type={showPassword ? "text" : "password"}
               placeholder="Min. 8 characters"
-              value={password}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
-              style={{ width: '100%', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '5px' }}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                border: '1px solid #ccc',
+                borderRadius: '5px',
+              }}
               required
             />
             <span
-              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', cursor: 'pointer' }}
-              onClick={handleTogglePasswordVisibility}
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                cursor: 'pointer',
+                fontSize: '1.2rem',
+                color: 'gray',
+              }}
+              onClick={handlePasswordVisibility}
             >
               {showPassword ? '🙈' : '👁️'}
             </span>
           </div>
         </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
-          <label htmlFor="phone" style={{ display: 'block', marginBottom: '0.5rem', textAlign: 'left' }}>
-            Phone Number
-          </label>
-          <PhoneInput
-            id="phone"
-            placeholder="Enter phone number"
-            value={number}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '5px' }}
-          />
-        </div>
-
-        {errorMessage && <p style={{ color: 'red', marginBottom: '1.5rem' }}>{errorMessage}</p>}
-
         <button
           type="submit"
-          onClick={handleSignUp}
+          disabled={isSubmitting}
           style={{
             width: '100%',
             padding: '0.75rem',
-            backgroundColor: '#f56565',
+            backgroundColor: isSubmitting ? '#ccc' : '#f56565',
             color: 'white',
             border: 'none',
             borderRadius: '5px',
-            cursor: 'pointer',
+            cursor: isSubmitting ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
         >
-          Sign Up
+          {isSubmitting ? 'Signing Up...' : 'Sign Up'}
         </button>
-      </form>
+      </Form>
 
-      <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-        <p>
-          Already have an account?{' '}
-          <Link to="/signin" style={{ color: '#f56565' }}>
-            Login
-          </Link>
-        </p>
-      </div>
+      <p style={{ marginTop: '1rem' }}>
+        Already have an account? <Link to="/signin" style={{ color: '#4a5568', textDecoration: 'none' }}>Sign in</Link>
+      </p>
     </div>
   );
 }
-
-export default SignUp;

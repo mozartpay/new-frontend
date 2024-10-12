@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLoaderData } from '@remix-run/react';
-import { json, LoaderFunction } from '@remix-run/node';
+import { json, LoaderFunction, redirect } from '@remix-run/node';
 import { motion } from 'framer-motion';
-import axios from 'axios';
-import { getSession } from '~/sessions';
-import { decrypt } from '~/utils/encryption';
+import { getUserFromSession } from '~/sessions/index';
 import { useUser } from '~/context/UserContext';
+import axios from 'axios';
 import "~/styles/admin.css";
 
 // Import your images
 import USDC from '~/assets/img/dashboards/USDC.png';
 import XLM from '~/assets/img/dashboards/XLM.png';
 import EURC from '~/assets/img/dashboards/EURC.png';
+
+import { getStellarAccount, createTrustline, createXLMAccount } from '~/utils/api';
 
 interface StellarAccount {
   publicKey: string;
@@ -21,27 +22,34 @@ interface StellarAccount {
 }
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const session = await getSession(request.headers.get("Cookie"));
-  const userJson = session.get("user");
+  const user = await getUserFromSession(request);
 
-  if (!userJson) {
-    return json({ user: null, apiUrl: process.env.API_URL });
+  if (!user || !user.email || !user.isAuthorized) {
+    return redirect("/signin");
+  }
+
+  const apiUrl = process.env.API_URL;
+
+  if (!apiUrl) {
+    throw new Error("API_URL is not defined in environment variables");
   }
 
   try {
-    const decryptedUser = decrypt(userJson);
-    const user = JSON.parse(decryptedUser);
-    return json({ user, apiUrl: process.env.API_URL });
+    const stellarAccount = await getStellarAccount(user.email, user.token, apiUrl);
+    return json({ user, apiUrl, token: user.token, stellarAccount });
   } catch (error) {
-    console.error("Error decrypting user data:", error);
-    return json({ user: null, apiUrl: process.env.API_URL });
+    console.error("Error processing user data:", error);
+    if (error instanceof Error) {
+      return json({ user, apiUrl, token: user.token, stellarAccount: null, error: error.message });
+    }
+    return json({ user, apiUrl, token: user.token, stellarAccount: null, error: "An unexpected error occurred" });
   }
 };
 
 export default function AdminAdd() {
-  const { user: loaderUser, apiUrl } = useLoaderData<{ user: any, apiUrl: string }>();
+  const { user: loaderUser, apiUrl, token, stellarAccount: initialStellarAccount } = useLoaderData<{ user: any, apiUrl: string, token: string, stellarAccount: StellarAccount | null }>();
   const [currency, setCurrency] = useState<string>('');
-  const [stellarAccount, setStellarAccount] = useState<StellarAccount | null>(null);
+  const [stellarAccount, setStellarAccount] = useState<StellarAccount | null>(initialStellarAccount);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -74,25 +82,35 @@ export default function AdminAdd() {
       setLoading(true);
       const response = await axios.get(
         `${apiUrl}/balance?email=${encodeURIComponent(user.email)}`,
-        { headers: { 'Content-Type': 'application/json' } }
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          } 
+        }
       );
 
-      const { balance, publicKey } = response.data;
+      const { balances, publicKey } = response.data;
 
-      if (balance && publicKey) {
+      if (balances && publicKey) {
         const updatedAccount: StellarAccount = {
           publicKey,
-          balance,
-          hasUSDCTrustline: false,
-          hasEURCTrustline: false,
+          balance: balances.find((b: any) => b.asset_code === 'XLM')?.balance || '0',
+          hasUSDCTrustline: balances.some((b: any) => b.asset_code === 'USDC'),
+          hasEURCTrustline: balances.some((b: any) => b.asset_code === 'EURC'),
         };
 
         setStellarAccount(updatedAccount);
         localStorage.setItem('stellarAccount', JSON.stringify(updatedAccount));
+      } else {
+        setStellarAccount(null);
+        localStorage.removeItem('stellarAccount');
       }
     } catch (error) {
       console.error('Error fetching Stellar account and balance:', error);
       setError('Failed to fetch balance and public key. Please try again later.');
+      setStellarAccount(null);
+      localStorage.removeItem('stellarAccount');
     } finally {
       setLoading(false);
     }
@@ -104,6 +122,11 @@ export default function AdminAdd() {
   };
 
   const handleAddPayment = async () => {
+    if (!user || !user.email) {
+      setError('User information is missing. Please sign in again.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -111,32 +134,24 @@ export default function AdminAdd() {
       switch (currency) {
         case 'USD':
         case 'EUR':
-          response = await axios.post(
-            `${apiUrl}/trustline`,
-            { email: user.email, currency },
-            { headers: { 'Content-Type': 'application/json', Accept: '*/*' } }
-          );
+          response = await createTrustline(user.email, currency, token, apiUrl);
           break;
         case 'XLM':
-          response = await axios.post(
-            `${apiUrl}/xlm/`,
-            { email: user.email, currency: 'XLM' },
-            { headers: { 'Content-Type': 'application/json', Accept: 'application/json' } }
-          );
+          response = await createXLMAccount(user.email, token, apiUrl);
           break;
         default:
           throw new Error(`Currency ${currency} not supported yet.`);
       }
 
-      const { publicKey, hasUSDCTrustline, hasEURCTrustline } = response.data;
-      const updatedAccount = {
-        ...stellarAccount,
+      const { publicKey, hasUSDCTrustline, hasEURCTrustline } = response;
+      const updatedAccount: StellarAccount = {
+        ...stellarAccount!,
         publicKey,
         hasUSDCTrustline: currency === 'USD' ? true : stellarAccount?.hasUSDCTrustline || false,
         hasEURCTrustline: currency === 'EUR' ? true : stellarAccount?.hasEURCTrustline || false,
+        balance: stellarAccount?.balance || '0'
       };
       setStellarAccount(updatedAccount);
-      localStorage.setItem('stellarAccount', JSON.stringify(updatedAccount));
       setIsModalOpen(true);
     } catch (error) {
       console.error('Error creating trustline or account:', error);
@@ -236,7 +251,7 @@ export default function AdminAdd() {
           />
         ) : null}
 
-        {currency === 'XLM' && stellarAccount ? (
+        {currency === 'XLM' && stellarAccount && stellarAccount.publicKey ? (
           <PaymentMethodCard
             imgSrc={XLM}
             title="XLM"
@@ -252,7 +267,7 @@ export default function AdminAdd() {
           <PaymentMethodCard
             imgSrc={XLM}
             title="XLM"
-            description="Stellar payment method"
+            description="Create a Stellar account to start using XLM"
             onClick={handleAddPayment}
           />
         ) : null}

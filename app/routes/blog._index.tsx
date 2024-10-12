@@ -5,7 +5,6 @@ import "../styles/global.css";
 const BlogIndex = () => {
   return (
     <div>
-
       <ArticleList />
     </div>
   );

@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLoaderData } from '@remix-run/react';
-import { json, LoaderFunction } from '@remix-run/node';
-import { motion } from 'framer-motion';
+import { json, LoaderFunction, redirect } from '@remix-run/node';
 import axios from 'axios';
-import { getSession } from '~/sessions';
-import { decrypt } from '~/utils/encryption';
+import { getUserFromSession } from '~/sessions/index';
 import { useUser } from '~/context/UserContext';
+import { motion } from 'framer-motion';
 import "~/styles/admin.css";
 
 // Import your images
@@ -13,33 +12,32 @@ import USDC from '~/assets/img/dashboards/USDC.png';
 import XLM from '~/assets/img/dashboards/XLM.png';
 import EURC from '~/assets/img/dashboards/EURC.png';
 
-import type { ENV } from "~/types/env";
-
+// Define the Balance type
 interface Balance {
   asset_code: string;
   balance: string;
 }
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const session = await getSession(request.headers.get("Cookie"));
-  const userJson = session.get("user");
+  const user = await getUserFromSession(request);
 
-  if (!userJson) {
-    return json({ user: null, apiUrl: process.env.API_URL });
+  if (!user) {
+    return redirect("/signin");
   }
 
   try {
-    const decryptedUser = decrypt(userJson);
-    const user = JSON.parse(decryptedUser);
-    return json({ user, apiUrl: process.env.API_URL });
+    if (!user.email || !user.isAuthorized) {
+      return redirect("/signin");
+    }
+    return json({ user, apiUrl: process.env.API_URL, token: user.token });
   } catch (error) {
-    console.error("Error decrypting user data:", error);
-    return json({ user: null, apiUrl: process.env.API_URL });
+    console.error("Error processing user data:", error);
+    return redirect("/signin");
   }
 };
 
 export default function AdminWithdraw() {
-  const { user: loaderUser, apiUrl } = useLoaderData<{ user: any, apiUrl: string }>();
+  const { user: loaderUser, apiUrl, token } = useLoaderData<{ user: any, apiUrl: string, token: string }>();
   const [amount, setAmount] = useState<string>('');
   const [currency, setCurrency] = useState<string>('');
   const [balances, setBalances] = useState<Balance[]>([]);

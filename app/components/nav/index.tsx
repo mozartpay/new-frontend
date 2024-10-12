@@ -12,30 +12,34 @@ interface NavProps {
 
 export default function Nav({ isDarkMode, onToggleDarkMode }: NavProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, setUser } = useUser();
+  const { user, logout, setUser } = useUser();
   const navigate = useNavigate();
   const darkModeContext = useContext(DarkModeContext);
   const fetcher = useFetcher();
   const matches = useMatches();
+  const [currentUser, setCurrentUser] = useState(user);
 
   // Update user context when root loader data changes
   useEffect(() => {
     const rootLoaderData = matches[0]?.data;
     if (rootLoaderData && rootLoaderData.user) {
-      setUser(rootLoaderData.user);
-    } else {
-      setUser(null);
+      // setUser(rootLoaderData.user);
     }
-  }, [matches, setUser]);
+  }, [matches]);
+
+  useEffect(() => {
+    setCurrentUser(user);
+  }, [user]);
 
   const onToggle = () => {
     setIsOpen(!isOpen);
   };
 
-  const handleLogout = () => {
-    fetcher.submit({}, { method: "post", action: "/logout" });
+  const handleLogout = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    await logout();
+    // Update the user context to null after logout
     setUser(null);
-    sessionStorage.removeItem('user');
     navigate('/');
   };
 
@@ -49,13 +53,10 @@ export default function Nav({ isDarkMode, onToggleDarkMode }: NavProps) {
       style={{ overflow: 'hidden', padding: '16px', backgroundColor: isDarkMode ? '#2d3748' : '#f9f9f9' }}
     >
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {user ? (
+        {currentUser ? (
           <>
             <RemixLink to="/admin/profile" style={{ textDecoration: 'none', color: isDarkMode ? '#f7fafc' : '#4A5568', fontSize: '18px' }}>
               Profile
-            </RemixLink>
-            <RemixLink to="/admin/settings" style={{ textDecoration: 'none', color: isDarkMode ? '#f7fafc' : '#4A5568', fontSize: '18px' }}>
-              Settings
             </RemixLink>
             <button
               onClick={handleLogout}
@@ -130,16 +131,16 @@ export default function Nav({ isDarkMode, onToggleDarkMode }: NavProps) {
               animate={{ opacity: 1 }}
               transition={{ duration: 1 }}
             >
-              <RemixLink to={user ? "/admin" : "/"}>
+              <RemixLink to={currentUser ? "/admin" : "/"}>
                 <img src={logo} style={{ width: '100px', height: 'auto' }} alt="Logo" />
               </RemixLink>
             </motion.div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            {user ? (
+            {currentUser ? (
               <>
-                <div style={{ marginRight: '16px' }}>Welcome, {user.name || user.email}</div>
+                <div style={{ marginRight: '16px' }}>Welcome, {currentUser.name}</div>
                 <button
                   onClick={handleLogout}
                   style={{

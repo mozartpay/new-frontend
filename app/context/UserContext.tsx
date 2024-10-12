@@ -1,41 +1,25 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-
-interface User {
-  email: string;
-  name?: string;
-  isAuthorized?: boolean;
-  preferredCurrency?: string;
-}
+import React, { createContext, useState, useContext } from 'react';
+import { useNavigate } from '@remix-run/react';
 
 interface UserContextType {
-  user: User | null;
-  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  user: any;
+  setUser: React.Dispatch<React.SetStateAction<any>>;
   logout: () => void;
-  updatePreferredCurrency: (currency: string) => void;
 }
 
-const UserContext = createContext<UserContextType | undefined>(undefined);
+const UserContext = createContext<UserContextType | null>(null);
 
-export const UserProvider: React.FC<{ children: React.ReactNode; initialUser?: User | null }> = ({ children, initialUser = null }) => {
-  const [user, setUser] = useState<User | null>(initialUser);
-
-  useEffect(() => {
-    if (initialUser) {
-      setUser(initialUser);
-    }
-  }, [initialUser]);
+export const UserProvider = ({ children, initialUser }: { children: React.ReactNode, initialUser: any }) => {
+  const [user, setUser] = useState(initialUser);
+  const navigate = useNavigate();
 
   const logout = () => {
     setUser(null);
-    sessionStorage.removeItem('user');
-  };
-
-  const updatePreferredCurrency = (currency: string) => {
-    setUser(prevUser => prevUser ? { ...prevUser, preferredCurrency: currency } : null);
+    navigate('/logout', { replace: true });
   };
 
   return (
-    <UserContext.Provider value={{ user, setUser, logout, updatePreferredCurrency }}>
+    <UserContext.Provider value={{ user, setUser, logout }}>
       {children}
     </UserContext.Provider>
   );
@@ -43,7 +27,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode; initialUser?: U
 
 export const useUser = () => {
   const context = useContext(UserContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useUser must be used within a UserProvider');
   }
   return context;

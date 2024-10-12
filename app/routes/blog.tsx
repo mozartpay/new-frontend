@@ -1,14 +1,17 @@
 // routes/blog.tsx
+import type { MetaFunction } from '@remix-run/node';
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Outlet } from '@remix-run/react';
 import { format } from 'date-fns';
 import { useUser } from '~/context/UserContext';
+import "../styles/blog.css";
 
-export function links() {
+export const meta: MetaFunction = () => {
   return [
-    { rel: "stylesheet", href: "../styles/blog.css" }
+    { title: "Blog" },
+    { name: "description", content: "Welcome to our blog" },
   ];
-}
+};
 
 // UserContext.tsx
 interface User { email: string; }

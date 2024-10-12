@@ -5,19 +5,14 @@ import {
   Scripts,
   ScrollRestoration,
   useLoaderData,
+  json,
 } from "@remix-run/react";
 import type { LoaderFunction } from "@remix-run/node";
 import LayoutComponent from "./components/layout";
 import { UserProvider } from '~/context/UserContext';
-import { decrypt } from '~/utils/encryption';
-import { createCookie } from "@remix-run/node";
+import { getUserFromSession } from '~/sessions/index';
 
-const userCookie = createCookie("user", {
-  maxAge: 60 * 6000, // 60 minutes in seconds
-  secure: process.env.NODE_ENV === "production",
-  httpOnly: true,
-  sameSite: "lax",
-});
+
 // Links for global CSS or other resources
 export function links() {
   return [{ rel: "stylesheet", href: "../app/styles/global.css" }];
@@ -25,36 +20,48 @@ export function links() {
 
 // Global loader
 export const loader: LoaderFunction = async ({ request }) => {
-  const cookieHeader = request.headers.get("Cookie");
-  const userCookieValue = await userCookie.parse(cookieHeader);
-  
-  let user = null;
-  if (userCookieValue) {
-    try {
-      const decryptedUser = decrypt(userCookieValue);
-      user = decryptedUser ? JSON.parse(decryptedUser) : null;
-      // Ensure the user object has all the necessary fields
-      user = {
-        ...user,
-        preferredCurrency: user.preferredCurrency || '',
-        publicKeyXlm: user.publicKeyXlm || '',
-        image: user.image || '',
-      };
-    } catch (error) {
-      console.error('Error parsing decrypted user data:', error);
-    }
-  }
-  return { 
-    user,
+  const user = await getUserFromSession(request);
+  return json({
     ENV: {
-      API_URL: process.env.API_URL
-    }
-  };
+      API_URL: process.env.API_URL,
+      user
+      // Add other environment variables as needed
+    },
+  });
 };
 
-export function Layout({ children }: { children: React.ReactNode }) {
+function Layout() {
+  return (
+    <LayoutComponent>
+      <Outlet />
+    </LayoutComponent>
+  );
+}
+
+// Error boundary to catch unexpected errors
+export function ErrorBoundary({ error }: { error: Error }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <Meta />
+        <Links />
+      </head>
+      <body>
+        <div>
+          <h1>Application Error</h1>
+          <p>{error?.message || "An unexpected error occurred."}</p>
+        </div>
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+export default function App() {
   const { user } = useLoaderData<{ user: any }>();
-  
+
   return (
     <html lang="en">
       <head>
@@ -65,31 +72,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <UserProvider initialUser={user}>
-          <LayoutComponent>
-            {children}
-          </LayoutComponent>
+          <Layout />
+          <ScrollRestoration />
+          <Scripts />
         </UserProvider>
-        <ScrollRestoration />
-        <Scripts />
       </body>
     </html>
-  );
-}
-
-// Error boundary to catch unexpected errors
-export function ErrorBoundary({ error }: { error: Error }) {
-  return (
-    <div>
-      <h1>Application Error</h1>
-      <p>{error?.message || "An unexpected error occurred."}</p> {/* Add a fallback message */}
-    </div>
-  );
-}
-
-export default function App() {
-  return (
-
-      <Outlet />
-
   );
 }

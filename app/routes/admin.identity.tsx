@@ -1,33 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLoaderData } from '@remix-run/react';
-import { json, LoaderFunction } from '@remix-run/node';
-import { motion } from 'framer-motion';
+import { json, LoaderFunction, redirect } from '@remix-run/node';
 import axios from 'axios';
-import { getSession } from '~/sessions';
-import { decrypt } from '~/utils/encryption';
+import { getUserFromSession } from '~/sessions/index';
 import { useUser } from '~/context/UserContext';
 import "~/styles/admin.css";
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const session = await getSession(request.headers.get("Cookie"));
-  const userJson = session.get("user");
+  const user = await getUserFromSession(request);
 
-  if (!userJson) {
-    return json({ user: null });
+  if (!user) {
+    return redirect("/signin");
   }
 
   try {
-    const decryptedUser = decrypt(userJson);
-    const user = JSON.parse(decryptedUser);
-    return json({ user });
+    if (!user.email || !user.isAuthorized) {
+      return redirect("/signin");
+    }
+    return json({ user, apiUrl: process.env.API_URL, token: user.token });
   } catch (error) {
-    console.error("Error decrypting user data:", error);
-    return json({ user: null });
+    console.error("Error processing user data:", error);
+    return redirect("/signin");
   }
 };
 
 export default function AdminIdentity() {
-  const { user: loaderUser } = useLoaderData<{ user: any }>();
+  const { user: loaderUser, apiUrl, token } = useLoaderData<{ user: any, apiUrl: string, token: string }>();
   const [selectedDocumentType, setSelectedDocumentType] = useState('');
   const [image, setImage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState('');
@@ -94,7 +92,7 @@ export default function AdminIdentity() {
 
   return (
     <div className="admin-identity">
-      <h1>Identity Management Portal</h1>
+      <h1>Identity Verification</h1>
       <p>Your security is our top priority. To ensure a safe and secure environment, we need to verify your identity before granting access to our services.</p>
       
       <h2>Instructions:</h2>

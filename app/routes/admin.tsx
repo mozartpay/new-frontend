@@ -1,12 +1,13 @@
-import { LoaderFunction, redirect } from "@remix-run/node";
+import { LoaderFunction, redirect, json } from "@remix-run/node";
 import { useLoaderData, Link, Outlet } from "@remix-run/react";
-import { getSession } from "~/sessions";
-import { decrypt } from '~/utils/encryption';
+import { getUserFromSession } from "~/sessions";
 import { useUser } from '~/context/UserContext';
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import { motion } from 'framer-motion';
 import "../styles/admin.css";
+import { useNavigate } from 'react-router-dom';
+import { UserProvider } from '~/context/UserContext';
+import { getBalances } from "~/utils/api";
 
 type BalanceObj = {
   asset_code: string;
@@ -14,66 +15,49 @@ type BalanceObj = {
 };
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const session = await getSession(request.headers.get("Cookie"));
-  const userJson = session.get("user");
+  const user = await getUserFromSession(request);
 
-  if (!userJson) {
+  if (!user) {
     return redirect("/signin");
   }
 
   try {
-    const decryptedUser = decrypt(userJson);
-    if (!decryptedUser) {
+    if (!user.email || !user.isAuthorized) {
       return redirect("/signin");
     }
-    const user = JSON.parse(decryptedUser);
-    if (!user || !user.email) {
-      return redirect("/signin");
+    
+    let balances: BalanceObj[] = [];
+    let error: string | null = null;
+
+    try {
+      balances = await getBalances(user.email, user.token);
+    } catch (balanceError: any) {
+      console.error("Error fetching balances:", balanceError.response?.data || balanceError.message);
+      error = balanceError.response?.data?.error || "Failed to fetch balances";
     }
-    // Pass the API URL to the client
-    return { user, apiUrl: process.env.API_URL };
+    
+    return json({ user, balances, apiUrl: process.env.API_URL, token: user.token, error });
   } catch (error) {
+    console.error("Error processing user data:", error);
     return redirect("/signin");
   }
 };
 
 export default function Admin() {
-  const data = useLoaderData<{ user: any, apiUrl: string }>();
+  const data = useLoaderData<{ user: any, balances: BalanceObj[], apiUrl: string, token: string, error: string | null }>();
   const { user, setUser } = useUser();
-  const [balances, setBalances] = useState<BalanceObj[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [balances, setBalances] = useState<BalanceObj[]>(data.balances);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(data.error);
 
   useEffect(() => {
     if (data.user && (!user || !user.isAuthorized)) {
       setUser({ ...data.user, isAuthorized: true });
+    } else if (!data.user) {
+      navigate('/signin');
     }
-  }, [data.user, user, setUser]);
-
-  useEffect(() => {
-    if (user && user.email) {
-      setIsLoading(true);
-      setError(null);
-      axios({
-        method: 'get',
-        url: `${data.apiUrl}/balance?email=${encodeURIComponent(user.email)}`,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-      .then(response => {
-        const { balances } = response.data;
-        setBalances(balances || []);
-      })
-      .catch(error => {
-        console.error("Error fetching balances:", error.response ? error.response.data : error.message);
-        setError('Failed to load balances. Please try again later.');
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
-    }
-  }, [user, data.apiUrl]);
+  }, [data.user, user, setUser, navigate]);
 
   if (!user || !user.isAuthorized) {
     return <div>Error: User not authorized. Please <a href="/signin">sign in</a> again.</div>;
@@ -94,25 +78,28 @@ export default function Admin() {
   };
 
   return (
-    <div className="dashboard">
-      <aside className="sidebar">
-        <h1>Mozart</h1>
-        <nav>
-          <ul>
-            <li><Link to="/admin">Dashboard</Link></li>
-            <li><Link to="/admin/add">Add</Link></li>
-            <li><Link to="/admin/withdraw">Withdraw</Link></li>
-            <li><Link to="/admin/profile">Profile</Link></li>
-            <li><Link to="/admin/send">Send Money</Link></li>
-            <li><Link to="/admin/request">Request Money</Link></li>
-            <li><Link to="/admin/identity">Identity Verification</Link></li>
-            <li><Link to="/admin/manage">Manage Requests</Link></li>
-          </ul>
-        </nav>
-      </aside>
-      <main className="main-content">
-        <Outlet context={{ balances, isLoading, error, cardVariants, loadingVariants }} />
-      </main>
-    </div>
+    <UserProvider initialUser={user}>
+      <div className="dashboard">
+        <aside className="sidebar">
+          <h1>Mozart</h1>
+          <nav>
+            <ul>
+              <li><Link to="/admin">Dashboard</Link></li>
+              <li><Link to="/admin/add">Add</Link></li>
+              <li><Link to="/admin/withdraw">Withdraw</Link></li>
+              <li><Link to="/admin/profile">Profile</Link></li>
+              <li><Link to="/admin/send">Send Money</Link></li>
+              <li><Link to="/admin/request">Request Money</Link></li>
+              <li><Link to="/admin/identity">Identity Verification</Link></li>
+              <li><Link to="/admin/manage">Manage Requests</Link></li>
+            </ul>
+          </nav>
+        </aside>
+        <main className="main-content">
+          {error && <div className="error-message">{error}</div>}
+          <Outlet context={{ balances, isLoading, error, cardVariants, loadingVariants }} />
+        </main>
+      </div>
+    </UserProvider>
   );
 }
