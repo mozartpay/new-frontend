@@ -55,7 +55,7 @@ export default function Admin() {
       setError(null);
       axios({
         method: 'get',
-        url: `${import.meta.env.VITE_API_URL}/balance?email=${encodeURIComponent(user.email)}`,
+        url: `${process.env.API_URL}/balance?email=${encodeURIComponent(user.email)}`,
         headers: {
           'Content-Type': 'application/json',
         },
