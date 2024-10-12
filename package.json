@@ -7,8 +7,10 @@
     "build": "remix vite:build",
     "dev": "remix vite:dev",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
-    "start": "remix-serve ./build/server/index.js",
-    "typecheck": "tsc"
+    "start": "react-scripts start",
+    "test": "react-scripts test",
+    "typecheck": "tsc",
+    "eject": "react-scripts eject"
   },
   "dependencies": {
     "@netlify/functions": "^2.8.1",
@@ -22,8 +24,8 @@
     "date-fns": "^4.1.0",
     "framer-motion": "^11.11.0",
     "isbot": "^4.1.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
     "react-icons": "^5.3.0",
     "react-intersection-observer": "^9.13.1",
     "react-phone-number-input": "^3.4.8",
