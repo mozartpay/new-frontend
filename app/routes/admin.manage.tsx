@@ -1,23 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLoaderData } from '@remix-run/react';
 import { json, LoaderFunction } from '@remix-run/node';
-import { motion } from 'framer-motion';
 import axios from 'axios';
 import { getSession } from '~/sessions';
 import { decrypt } from '~/utils/encryption';
 import { useUser } from '~/context/UserContext';
 import "~/styles/admin.css";
 
-interface PaymentRequest {
-  _id: string;
-  amount: number;
-  currency: string;
-  paymentMethod: string;
-  email: string;
+interface Request {
+  id: string;
+  type: string;
   status: string;
-  createdAt: string;
-  receiverEmail: string;
+  _id: string;
   senderEmail: string;
+  receiverEmail: string;
+  amount: string;
+  currency: string;
+  createdAt: string;
 }
 
 export const loader: LoaderFunction = async ({ request }) => {
@@ -25,25 +24,23 @@ export const loader: LoaderFunction = async ({ request }) => {
   const userJson = session.get("user");
 
   if (!userJson) {
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 
   try {
     const decryptedUser = decrypt(userJson);
     const user = JSON.parse(decryptedUser);
-    return json({ user });
+    return json({ user, apiUrl: process.env.API_URL });
   } catch (error) {
     console.error("Error decrypting user data:", error);
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 };
 
 export default function AdminManage() {
-  const { user: loaderUser } = useLoaderData<{ user: any }>();
-  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<PaymentRequest | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const { user: loaderUser, apiUrl } = useLoaderData<{ user: any, apiUrl: string }>();
+  const [requests, setRequests] = useState<Request[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { user, setUser } = useUser();
@@ -64,38 +61,22 @@ export default function AdminManage() {
 
   const fetchRequests = async () => {
     try {
-      const response = await axios.get(`${process.env.API_URL}/request/receiver/${user.email}`);
-      const filteredRequests = response.data.filter((request: PaymentRequest) => request.receiverEmail === user.email);
-      setPaymentRequests(filteredRequests);
-    } catch (error) {
-      console.error('Error fetching payment requests:', error);
-      setError('Failed to fetch payment requests. Please try again later.');
-    }
-  };
-
-  const handleAction = async (action: 'accept' | 'decline', requestId: string) => {
-    setLoading(true);
-    try {
-      const response = await axios.patch(`${process.env.API_URL}/request/${requestId}`, {
-        status: action === 'accept' ? 'accepted' : 'declined',
-      });
-
-      setPaymentRequests((prevRequests) =>
-        prevRequests.map((req) => (req._id === requestId ? { ...req, status: response.data.status } : req))
+      setLoading(true);
+      const response = await axios.get(
+        `${apiUrl}/request/${encodeURIComponent(user.email)}`,
+        { headers: { 'Content-Type': 'application/json' } }
       );
-
-      setError(`Request ${action === 'accept' ? 'accepted' : 'declined'} successfully.`);
+      if (response.data && Array.isArray(response.data)) {
+        setRequests(response.data);
+      } else {
+        setError('Invalid response format from the server.');
+      }
     } catch (error) {
-      console.error(`Error ${action}ing request:`, error);
-      setError(`Error ${action === 'accept' ? 'accepting' : 'declining'} request.`);
+      console.error('Error fetching requests:', error);
+      setError('Failed to fetch requests. Please try again later.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleViewDetails = (request: PaymentRequest) => {
-    setSelectedRequest(request);
-    setIsModalOpen(true);
   };
 
   if (!user) {
@@ -103,64 +84,45 @@ export default function AdminManage() {
   }
 
   return (
-    <div className="admin-manage">
-      <h1>Manage Payment Requests</h1>
-
+    <div className="admin-page admin-manage">
+      <h1>Manage Requests</h1>
       {error && <p className="error">{error}</p>}
-
-      <table className="payment-requests-table">
-        <thead>
-          <tr>
-            <th>Amount</th>
-            <th>Currency</th>
-            <th>Sender Email</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {paymentRequests.map((request) => (
-            <tr key={request._id}>
-              <td>{request.amount} {request.currency}</td>
-              <td>{request.currency}</td>
-              <td>{request.senderEmail}</td>
-              <td>{request.status}</td>
-              <td>
-                <button
-                  onClick={() => handleAction('accept', request._id)}
-                  disabled={request.status !== 'pending' || loading}
-                  className="action-button accept"
-                >
-                  Accept
-                </button>
-                <button
-                  onClick={() => handleAction('decline', request._id)}
-                  disabled={request.status !== 'pending' || loading}
-                  className="action-button decline"
-                >
-                  Decline
-                </button>
-                <button onClick={() => handleViewDetails(request)} className="action-button view">
-                  View Details
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {isModalOpen && selectedRequest && (
-        <div className="modal">
-          <div className="modal-content">
-            <h2>Payment Request Details</h2>
-            <p>Amount: {selectedRequest.amount} {selectedRequest.currency}</p>
-            <p>Sender Email: {selectedRequest.senderEmail}</p>
-            <p>Email: {selectedRequest.email}</p>
-            <p>Payment Method: {selectedRequest.paymentMethod}</p>
-            <p>Status: {selectedRequest.status}</p>
-            <p>Created At: {new Date(selectedRequest.createdAt).toLocaleString()}</p>
-            <button onClick={() => setIsModalOpen(false)}>Close</button>
-          </div>
+      {loading ? (
+        <p>Loading requests...</p>
+      ) : (
+        <div className="payment-requests-table-container">
+          <table className="payment-requests-table">
+            <thead>
+              <tr>
+                <th>Amount</th>
+                <th>Currency</th>
+                <th>Receiver</th>
+                <th>Status</th>
+                <th>Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((request) => (
+                <tr key={request._id}>
+                  <td>{request.amount}</td>
+                  <td>{request.currency}</td>
+                  <td>{request.receiverEmail}</td>
+                  <td>{request.status}</td>
+                  <td>{new Date(request.createdAt).toLocaleDateString()}</td>
+                  <td>
+                    <button className="action-button view">View</button>
+                    {request.status === 'pending' && (
+                      <>
+                        <button className="action-button accept">Accept</button>
+                        <button className="action-button decline">Decline</button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

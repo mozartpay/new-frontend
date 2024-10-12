@@ -10,4 +10,6 @@ module.exports = {
   serverEnvironmentVariables: ["API_URL", "ENCRYPTION_KEY", "SESSION_SECRET"],
   serverModuleFormat: "cjs",
   plugins: [/* other plugins */],
+  serverDependenciesToBundle: ["axios", /^marked.*/],
+  server: process.env.NODE_ENV === "development" ? undefined : "./server.js",
 };

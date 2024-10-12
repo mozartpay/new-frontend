@@ -21,27 +21,26 @@ const currencySymbols: CurrencySymbols = {
   XLM: '*',
 };
 
-
 export const loader: LoaderFunction = async ({ request }) => {
   const session = await getSession(request.headers.get("Cookie"));
   const userJson = session.get("user");
 
   if (!userJson) {
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 
   try {
     const decryptedUser = decrypt(userJson);
     const user = JSON.parse(decryptedUser);
-    return json({ user });
+    return json({ user, apiUrl: process.env.API_URL });
   } catch (error) {
     console.error("Error decrypting user data:", error);
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 };
 
 export default function AdminSend() {
-  const { user: loaderUser } = useLoaderData<{ user: any }>();
+  const { user: loaderUser, apiUrl } = useLoaderData<{ user: any, apiUrl: string }>();
   const [amount, setAmount] = useState<number | string>(0);
   const [sourceCurrency, setSourceCurrency] = useState<string>('XLM');
   const [showModal, setShowModal] = useState(false);
@@ -72,7 +71,8 @@ export default function AdminSend() {
   const fetchBalances = async () => {
     try {
       const response = await axios.get(
-        `${process.env.API_URL}/balance?email=${encodeURIComponent(user.email)}`
+        `${apiUrl}/balance?email=${encodeURIComponent(user.email)}`, 
+        { headers: { 'Content-Type': 'application/json' } }
       );
       const apiBalances = response.data.balances || [];
 
@@ -114,7 +114,7 @@ export default function AdminSend() {
     setIsSending(true);
     try {
       const response = await axios.post(
-        `${process.env.API_URL}/send`,
+        `${apiUrl}/send`,
         {
           senderEmail: user.email,
           amount: amount.toString(),

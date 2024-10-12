@@ -3,7 +3,7 @@ import { useLoaderData, Link, Outlet } from "@remix-run/react";
 import { getSession } from "~/sessions";
 import { decrypt } from '~/utils/encryption';
 import { useUser } from '~/context/UserContext';
-import { useEffect, useState } from 'react'; // Add this import
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import "../styles/admin.css";
@@ -30,14 +30,15 @@ export const loader: LoaderFunction = async ({ request }) => {
     if (!user || !user.email) {
       return redirect("/signin");
     }
-    return { user };
+    // Pass the API URL to the client
+    return { user, apiUrl: process.env.API_URL };
   } catch (error) {
     return redirect("/signin");
   }
 };
 
 export default function Admin() {
-  const data = useLoaderData<{ user: any }>();
+  const data = useLoaderData<{ user: any, apiUrl: string }>();
   const { user, setUser } = useUser();
   const [balances, setBalances] = useState<BalanceObj[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,7 +56,7 @@ export default function Admin() {
       setError(null);
       axios({
         method: 'get',
-        url: `${process.env.API_URL}/balance?email=${encodeURIComponent(user.email)}`,
+        url: `${data.apiUrl}/balance?email=${encodeURIComponent(user.email)}`,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -65,14 +66,14 @@ export default function Admin() {
         setBalances(balances || []);
       })
       .catch(error => {
-        console.error("Error fetching balances:", error);
-        setError('Failed to load balances.');
+        console.error("Error fetching balances:", error.response ? error.response.data : error.message);
+        setError('Failed to load balances. Please try again later.');
       })
       .finally(() => {
         setIsLoading(false);
       });
     }
-  }, [user]);
+  }, [user, data.apiUrl]);
 
   if (!user || !user.isAuthorized) {
     return <div>Error: User not authorized. Please <a href="/signin">sign in</a> again.</div>;

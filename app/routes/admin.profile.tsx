@@ -19,16 +19,16 @@ export const loader: LoaderFunction = async ({ request }) => {
   const userJson = session.get("user");
 
   if (!userJson) {
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 
   try {
     const decryptedUser = decrypt(userJson);
     const user = JSON.parse(decryptedUser);
-    return json({ user });
+    return json({ user, apiUrl: process.env.API_URL });
   } catch (error) {
     console.error("Error decrypting user data:", error);
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 };
 
@@ -49,7 +49,7 @@ export const action: ActionFunction = async ({ request }) => {
 };
 
 export default function AdminProfile() {
-  const { user: loaderUser } = useLoaderData<{ user: any }>();
+  const { user: loaderUser, apiUrl } = useLoaderData<{ user: any, apiUrl: string }>();
   const [privateKey, setPrivateKey] = useState<string | null>(null);
   const [isPrivateKeyBlurred, setIsPrivateKeyBlurred] = useState<boolean>(true);
   const [loadingPrivateKey, setLoadingPrivateKey] = useState<boolean>(false);
@@ -76,7 +76,7 @@ export default function AdminProfile() {
 
   const fetchUserData = async () => {
     try {
-      const response = await axios.get(`${process.env.API_URL}/profile/${user.email}`);
+      const response = await axios.get(`${apiUrl}/profile/${user.email}`);
       const userData = response.data;
       setUser({ ...user, ...userData });
       setUserImage(userData.image || null);
@@ -104,7 +104,7 @@ export default function AdminProfile() {
         try {
           setLoadingPrivateKey(true);
           const response = await axios.post(
-            `${process.env.API_URL}/xlm/decrypt`,
+            `${apiUrl}/xlm/decrypt`,
             {
               email: user.email,
             },
@@ -133,7 +133,7 @@ export default function AdminProfile() {
     const newPreferredCurrency = event.target.value;
     
     try {
-      const response = await axios.post(`${process.env.API_URL}/profile/preferredCurrency`, {
+      const response = await axios.post(`${apiUrl}/profile/preferredCurrency`, {
         email: user.email,
         preferredCurrency: newPreferredCurrency
       });
@@ -162,7 +162,7 @@ export default function AdminProfile() {
       reader.onloadend = async () => {
         const base64Image = reader.result as string;
         try {
-          const response = await axios.post(`${process.env.API_URL}/profile/image`, {
+          const response = await axios.post(`${apiUrl}/profile/image`, {
             email: user.email,
             image: base64Image
           });

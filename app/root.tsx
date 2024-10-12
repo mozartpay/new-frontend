@@ -18,11 +18,11 @@ const userCookie = createCookie("user", {
   httpOnly: true,
   sameSite: "lax",
 });
-
 // Links for global CSS or other resources
 export function links() {
   return [{ rel: "stylesheet", href: "../app/styles/global.css" }];
 }
+
 // Global loader
 export const loader: LoaderFunction = async ({ request }) => {
   const cookieHeader = request.headers.get("Cookie");
@@ -44,7 +44,12 @@ export const loader: LoaderFunction = async ({ request }) => {
       console.error('Error parsing decrypted user data:', error);
     }
   }
-  return { user };
+  return { 
+    user,
+    ENV: {
+      API_URL: process.env.API_URL
+    }
+  };
 };
 
 export function Layout({ children }: { children: React.ReactNode }) {

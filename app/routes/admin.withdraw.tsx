@@ -13,6 +13,8 @@ import USDC from '~/assets/img/dashboards/USDC.png';
 import XLM from '~/assets/img/dashboards/XLM.png';
 import EURC from '~/assets/img/dashboards/EURC.png';
 
+import type { ENV } from "~/types/env";
+
 interface Balance {
   asset_code: string;
   balance: string;
@@ -23,21 +25,21 @@ export const loader: LoaderFunction = async ({ request }) => {
   const userJson = session.get("user");
 
   if (!userJson) {
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 
   try {
     const decryptedUser = decrypt(userJson);
     const user = JSON.parse(decryptedUser);
-    return json({ user });
+    return json({ user, apiUrl: process.env.API_URL });
   } catch (error) {
     console.error("Error decrypting user data:", error);
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 };
 
 export default function AdminWithdraw() {
-  const { user: loaderUser } = useLoaderData<{ user: any }>();
+  const { user: loaderUser, apiUrl } = useLoaderData<{ user: any, apiUrl: string }>();
   const [amount, setAmount] = useState<string>('');
   const [currency, setCurrency] = useState<string>('');
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -66,16 +68,15 @@ export default function AdminWithdraw() {
   const fetchBalances = async () => {
     try {
       const response = await axios.get(
-        `${process.env.API_URL}/balance?email=${encodeURIComponent(user.email)}`,
+        `${apiUrl}/balance?email=${encodeURIComponent(user.email)}`,
         { headers: { 'Content-Type': 'application/json' } }
       );
       const apiBalances = response.data.balances || [];
 
-      const formattedBalances: { [key: string]: string } = {};
-      apiBalances.forEach((balance: any) => {
-        const currency = balance.asset_code || 'XLM';
-        formattedBalances[currency] = balance.balance;
-      });
+      const formattedBalances: Balance[] = apiBalances.map((balance: any) => ({
+        asset_code: balance.asset_code || 'XLM',
+        balance: balance.balance
+      }));
 
       setBalances(formattedBalances);
     } catch (error) {
