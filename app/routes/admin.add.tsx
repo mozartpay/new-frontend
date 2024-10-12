@@ -25,21 +25,21 @@ export const loader: LoaderFunction = async ({ request }) => {
   const userJson = session.get("user");
 
   if (!userJson) {
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 
   try {
     const decryptedUser = decrypt(userJson);
     const user = JSON.parse(decryptedUser);
-    return json({ user });
+    return json({ user, apiUrl: process.env.API_URL });
   } catch (error) {
     console.error("Error decrypting user data:", error);
-    return json({ user: null });
+    return json({ user: null, apiUrl: process.env.API_URL });
   }
 };
 
 export default function AdminAdd() {
-  const { user: loaderUser } = useLoaderData<{ user: any }>();
+  const { user: loaderUser, apiUrl } = useLoaderData<{ user: any, apiUrl: string }>();
   const [currency, setCurrency] = useState<string>('');
   const [stellarAccount, setStellarAccount] = useState<StellarAccount | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -73,7 +73,7 @@ export default function AdminAdd() {
     try {
       setLoading(true);
       const response = await axios.get(
-        `${process.env.API_URL}/balance?email=${user.email}`,
+        `${apiUrl}/balance?email=${encodeURIComponent(user.email)}`,
         { headers: { 'Content-Type': 'application/json' } }
       );
 
@@ -112,14 +112,14 @@ export default function AdminAdd() {
         case 'USD':
         case 'EUR':
           response = await axios.post(
-            `${process.env.API_URL}/trustline`,
+            `${apiUrl}/trustline`,
             { email: user.email, currency },
             { headers: { 'Content-Type': 'application/json', Accept: '*/*' } }
           );
           break;
         case 'XLM':
           response = await axios.post(
-            `${process.env.API_URL}/xlm/`,
+            `${apiUrl}/xlm/`,
             { email: user.email, currency: 'XLM' },
             { headers: { 'Content-Type': 'application/json', Accept: 'application/json' } }
           );
