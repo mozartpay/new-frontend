@@ -6,17 +6,23 @@ import {
   ScrollRestoration,
   useLoaderData,
   json,
+  LiveReload,
 } from "@remix-run/react";
-import type { LoaderFunction } from "@remix-run/node";
+import type { LinksFunction, LoaderFunction } from "@remix-run/node";
 import LayoutComponent from "./components/layout";
 import { UserProvider } from '~/context/UserContext';
 import { getUserFromSession } from '~/sessions/index';
+import { CookieConsent } from '~/components/CookieConsent';
+import { useCookieConsent } from '~/hooks/useCookieConsent';
 
+// Import the CSS file as a URL
+import cookieConsentStyles from '../app/styles/cookieconsent.css?url';
 
-// Links for global CSS or other resources
-export function links() {
-  return [{ rel: "stylesheet", href: "../app/styles/global.css" }];
-}
+export const links: LinksFunction = () => [
+  { rel: "stylesheet", href: cookieConsentStyles },
+  { rel: "stylesheet", href: "../app/styles/global.css" },
+  { rel: "stylesheet", href: CookieConsent.styles },
+];
 
 // Global loader
 export const loader: LoaderFunction = async ({ request }) => {
@@ -25,7 +31,6 @@ export const loader: LoaderFunction = async ({ request }) => {
     ENV: {
       API_URL: process.env.API_URL,
       user
-      // Add other environment variables as needed
     },
   });
 };
@@ -60,7 +65,9 @@ export function ErrorBoundary({ error }: { error: Error }) {
 }
 
 export default function App() {
-  const { user } = useLoaderData<{ user: any }>();
+  const data = useLoaderData<typeof loader>();
+  const { isAccepted } = useCookieConsent();
+  const hasGivenConsent = isAccepted('necessary');
 
   return (
     <html lang="en">
@@ -71,10 +78,12 @@ export default function App() {
         <Links />
       </head>
       <body>
-        <UserProvider initialUser={user}>
+        <UserProvider initialUser={data.ENV.user}>
           <Layout />
           <ScrollRestoration />
           <Scripts />
+          {!hasGivenConsent && <CookieConsent />}
+          {/*  <LiveReload />*/}
         </UserProvider>
       </body>
     </html>

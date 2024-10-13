@@ -42,7 +42,4 @@ export const loader: LoaderFunction = async () => {
   });
 };
 
-// Add this export to make it a valid Remix route
-export default function Sitemap() {
-  return null;
-}
+// No need for a default export in this case

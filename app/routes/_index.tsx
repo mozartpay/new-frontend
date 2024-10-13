@@ -97,157 +97,155 @@ export default function Home() {
   };
 
   return (
-   // <Layout>
-      <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 20px' }}>
-        {/* Navigation */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '100px 0',
-            gap: '40px',
-            flexWrap: 'wrap',
-          }}
-        >
-          <div style={{ flex: '1 1 50%' }}>
-            {/* Title with red underline */}
-            <motion.div
-              ref={titleRef}
-              initial={{ opacity: 0, y: -50 }}
-              animate={titleControls}
-              variants={{ visible: { opacity: 1, y: 0 } }}
-              transition={{ duration: 1 }}
-            >
-              <h1
-                style={{
-                  lineHeight: '1.1',
-                  fontWeight: 600,
-                  fontSize: '3rem',
-                  position: 'relative',
-                  color: 'var(--title-color)',
-                }}
-              >
-                <span style={{ color: 'var(--highlight-color)' }}>Harmonize</span>
-                <br />
-                <span>your day-to-day payments</span>
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: '-12px',
-                    width: '60%',
-                    height: '6px',
-                    backgroundColor: 'var(--highlight-color)',
-                    marginTop: '8px',
-                  }}
-                ></div>
-              </h1>
-            </motion.div>
+    <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 20px' }}>
 
-            <motion.div
-              ref={textRef}
-              initial={{ opacity: 0 }}
-              animate={textControls}
-              variants={{ visible: { opacity: 1 } }}
-              transition={{ duration: 1, delay: 0.5 }}
-              style={{ marginTop: '16px', color: 'var(--text-color)' }}
-            >
-              <p>Unlock access to the new era of payments!</p>
-            </motion.div>
-
-            {isClient && (
-              <motion.div
-                ref={buttonRef}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={buttonControls}
-                variants={{ visible: { opacity: 1, scale: 1 } }}
-                transition={{ duration: 0.5, delay: 1 }}
-                style={{ marginTop: '24px', display: 'flex', gap: '16px' }}
-              >
-                <Link to="/signin">
-                  <button
-                    style={{
-                      padding: '12px 24px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      borderRadius: '9999px',
-                      backgroundColor: '#F56565',
-                      color: 'white',
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.3s ease',
-                    }}
-                    onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#E53E3E')}
-                    onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F56565')}
-                  >
-                    Get started
-                  </button>
-                </Link>
-                <Link to="/contact">
-                  <button
-                    style={{
-                      padding: '12px 24px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      borderRadius: '9999px',
-                      backgroundColor: '#EDF2F7',
-                      color: '#2D3748',
-                      border: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Contact Us
-                  </button>
-                </Link>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Video Section */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '100px 0',
+          gap: '40px',
+          flexWrap: 'wrap',
+        }}
+      >
+        <div style={{ flex: '1 1 50%' }}>
+          {/* Title with red underline */}
           <motion.div
-            ref={videoRef}
-            initial={{ opacity: 0 }}
-            animate={videoControls}
-            variants={{ visible: { opacity: 1 } }}
-            transition={{ duration: 1.2, delay: 0.8 }}
-            style={{
-              flex: '1 1 50%',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
+            ref={titleRef}
+            initial={{ opacity: 0, y: -50 }}
+            animate={titleControls}
+            variants={{ visible: { opacity: 1, y: 0 } }}
+            transition={{ duration: 1 }}
           >
-            <div
+            <h1
               style={{
+                lineHeight: '1.1',
+                fontWeight: 600,
+                fontSize: '3rem',
                 position: 'relative',
-                height: '300px',
-                borderRadius: '16px',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-                width: '100%',
-                maxWidth: '500px',
-                overflow: 'hidden',
+                color: 'var(--title-color)',
               }}
             >
-              <iframe
-                src="https://player.vimeo.com/video/884100521"
-                style={{ width: '100%', height: '100%' }}
-                frameBorder="0"
-                allow="autoplay; fullscreen; picture-in-picture"
-                title="Video Title"
-              ></iframe>
-            </div>
+              <span style={{ color: 'var(--highlight-color)' }}>Harmonize</span>
+              <br />
+              <span>your day-to-day payments</span>
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '-12px',
+                  width: '60%',
+                  height: '6px',
+                  backgroundColor: 'var(--highlight-color)',
+                  marginTop: '8px',
+                }}
+              ></div>
+            </h1>
           </motion.div>
+
+          <motion.div
+            ref={textRef}
+            initial={{ opacity: 0 }}
+            animate={textControls}
+            variants={{ visible: { opacity: 1 } }}
+            transition={{ duration: 1, delay: 0.5 }}
+            style={{ marginTop: '16px', color: 'var(--text-color)' }}
+          >
+            <p>Unlock access to the new era of payments!</p>
+          </motion.div>
+
+          {isClient && (
+            <motion.div
+              ref={buttonRef}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={buttonControls}
+              variants={{ visible: { opacity: 1, scale: 1 } }}
+              transition={{ duration: 0.5, delay: 1 }}
+              style={{ marginTop: '24px', display: 'flex', gap: '16px' }}
+            >
+              <Link to="/signin">
+                <button
+                  style={{
+                    padding: '12px 24px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    borderRadius: '9999px',
+                    backgroundColor: '#F56565',
+                    color: 'white',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.3s ease',
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#E53E3E')}
+                  onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F56565')}
+                >
+                  Get started
+                </button>
+              </Link>
+              <Link to="/contact">
+                <button
+                  style={{
+                    padding: '12px 24px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    borderRadius: '9999px',
+                    backgroundColor: '#EDF2F7',
+                    color: '#2D3748',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Contact Us
+                </button>
+              </Link>
+            </motion.div>
+          )}
         </div>
 
-        {/* Additional Sections */}
-        <Features />
-        <Industries />
-        <Pricing />
-
-        {isClient && (
-          <GradientSelector isDarkMode={isDarkMode} onSelectGradient={handleSelectGradient} />
-        )}
+        {/* Video Section */}
+        <motion.div
+          ref={videoRef}
+          initial={{ opacity: 0 }}
+          animate={videoControls}
+          variants={{ visible: { opacity: 1 } }}
+          transition={{ duration: 1.2, delay: 0.8 }}
+          style={{
+            flex: '1 1 50%',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <div
+            style={{
+              position: 'relative',
+              height: '300px',
+              borderRadius: '16px',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+              width: '100%',
+              maxWidth: '500px',
+              overflow: 'hidden',
+            }}
+          >
+            <iframe
+              src="https://player.vimeo.com/video/884100521"
+              style={{ width: '100%', height: '100%' }}
+              frameBorder="0"
+              allow="autoplay; fullscreen; picture-in-picture"
+              title="Video Title"
+            ></iframe>
+          </div>
+        </motion.div>
       </div>
-   // </Layout>
+
+      {/* Additional Sections */}
+      <Features />
+      <Industries />
+      <Pricing />
+
+      {isClient && (
+        <GradientSelector isDarkMode={isDarkMode} onSelectGradient={handleSelectGradient} />
+      )}
+    </div>
   );
-};
+}

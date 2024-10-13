@@ -19,6 +19,7 @@
     "@remix-run/react": "^2.12.1",
     "@remix-run/serve": "^2.12.1",
     "axios": "^1.7.7",
+    "cookieconsent": "^3.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^11.11.0",
     "isbot": "^4.1.0",
