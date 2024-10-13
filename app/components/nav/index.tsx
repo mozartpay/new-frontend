@@ -37,10 +37,7 @@ export default function Nav({ isDarkMode, onToggleDarkMode }: NavProps) {
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
-    await logout();
-    // Update the user context to null after logout
-    setUser(null);
-    navigate('/');
+    logout();
   };
 
   const MobileNav = () => (

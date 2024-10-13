@@ -17,15 +17,11 @@ type BalanceObj = {
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
 
-  if (!user) {
+  if (!user || !user.isAuthorized) {
     return redirect("/signin");
   }
 
   try {
-    if (!user.email || !user.isAuthorized) {
-      return redirect("/signin");
-    }
-    
     let balances: BalanceObj[] = [];
     let error: string | null = null;
 

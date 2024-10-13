@@ -1,27 +1,40 @@
 import { ActionFunction, LoaderFunction, redirect } from "@remix-run/node";
 import { useEffect } from "react";
-import { useNavigate } from "@remix-run/react";
 import { destroyUserSession } from "~/sessions/index";
 import { useUser } from '~/context/UserContext';
 
 export const action: ActionFunction = async ({ request }) => {
-  return destroyUserSession(request);
+  return await handleLogout(request);
 };
 
 export const loader: LoaderFunction = async ({ request }) => {
-  return destroyUserSession(request);
+  return await handleLogout(request);
 };
 
-export default function Logout() {
-  const { setUser } = useUser();
-  const navigate = useNavigate();
+async function handleLogout(request: Request) {
+  await destroyUserSession(request);
   
+  // Get all cookies
+  const cookieHeader = request.headers.get("Cookie") || "";
+  const cookies = cookieHeader.split(';').map(cookie => cookie.trim().split('=')[0]);
+
+  // Create an array of Set-Cookie headers to clear all cookies
+  const clearCookieHeaders = cookies.map(cookieName => 
+    `${cookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax`
+  );
+
+  return redirect('/', {
+    headers: {
+      "Set-Cookie": clearCookieHeaders
+    }
+  });
+}
+
+export default function Logout() {
   useEffect(() => {
-    // Clear the user from context
-    setUser(null);
-    // Redirect to home page
-    navigate('/', { replace: true });
-  }, [setUser, navigate]);
+    // This effect will run after the server-side logout is complete
+    window.location.href = '/';
+  }, []);
   
   return null;
 }
