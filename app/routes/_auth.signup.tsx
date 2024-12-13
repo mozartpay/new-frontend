@@ -161,7 +161,7 @@ export default function SignUp() {
           <PhoneInput
             international
             countryCallingCodeEditable={false}
-            defaultCountry="US"
+            defaultCountry="CO"
             value={phoneNumber}
             onChange={(value) => setPhoneNumber(value || "")}
             style={{

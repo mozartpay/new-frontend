@@ -96,7 +96,13 @@ export default function SignIn() {
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submit(event.currentTarget, { method: 'post', replace: true });
+    const form = event.currentTarget;
+    if (form.checkValidity()) {
+      submit(form, { method: 'post', replace: true });
+    } else {
+      // Handle invalid form
+      console.error('Form is invalid');
+    }
   };
 
   return (

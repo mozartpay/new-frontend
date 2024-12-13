@@ -1,6 +1,17 @@
 import { useOutletContext } from "@remix-run/react";
 import { motion } from 'framer-motion';
 import { useUser } from '~/context/UserContext';
+import { redirect } from "@remix-run/node";
+import React from '@remix-run/react';
+import { useNavigate } from "@remix-run/react";
+import { useEffect } from "react";
+
+// Add this type definition
+type User = {
+  preferredCurrency?: string;
+  isPhoneVerified: boolean;
+  // ... other user properties
+};
 
 type ContextType = {
   balances: Array<{ asset_code: string; balance: string }>;
@@ -12,7 +23,14 @@ type ContextType = {
 
 export default function AdminIndex() {
   const { balances, isLoading, error, cardVariants, loadingVariants } = useOutletContext<ContextType>();
-  const { user } = useUser();
+  const { user } = useUser() as { user: User | null };
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user && user.isPhoneVerified === false) {
+      navigate('/verification');
+    }
+  }, [user, navigate]);
 
   const filteredBalances = user?.preferredCurrency
     ? balances.filter(balance => balance.asset_code === user.preferredCurrency)

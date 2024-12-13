@@ -866,3 +866,23 @@ body {
   background-color: #4299e1;
   color: white;
 }
+
+.network-badge {
+  background-color: #f0f0f0;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  color: #666;
+  margin-top: 8px;
+  display: inline-block;
+}
+
+.network-badge[data-network="TESTNET"] {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.network-badge[data-network="PUBLIC"] {
+  background-color: #d4edda;
+  color: #155724;
+}

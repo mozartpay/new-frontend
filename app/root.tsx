@@ -20,9 +20,9 @@ import cookieConsentStyles from '../app/styles/cookieconsent.css?url';
 
 export const links: LinksFunction = () => [
   { rel: "stylesheet", href: cookieConsentStyles },
-  { rel: "stylesheet", href: "../app/styles/global.css" },
-  { rel: "stylesheet", href: CookieConsent.styles },
+  { rel: "stylesheet", href: "../app/styles/global.css" }
 ];
+
 
 // Global loader
 export const loader: LoaderFunction = async ({ request }) => {

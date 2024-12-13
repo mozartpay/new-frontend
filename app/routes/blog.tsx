@@ -3,7 +3,6 @@ import type { MetaFunction } from '@remix-run/node';
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { Outlet } from '@remix-run/react';
 import { format } from 'date-fns';
-import { useUser } from '~/context/UserContext';
 import "../styles/blog.css";
 
 export const meta: MetaFunction = () => {
@@ -27,7 +26,7 @@ export const useUser = () => {
   const context = useContext(UserContext);
   if (!context) {
     console.error('useUser must be used within a UserProvider');
-    return { user: null, setUser: () => {} }; // Fallback empty implementation
+    return { user: null, setUser: () => {} };
   }
   return context;
 };
@@ -97,6 +96,15 @@ export const Blog = () => {
     </UserProvider>
   );
 };
+
+export function ErrorBoundary({ error }: { error: Error }) {
+  return (
+    <div>
+      <h1>Error</h1>
+      <p>{error.message}</p>
+    </div>
+  );
+}
 
 export default Blog;
 

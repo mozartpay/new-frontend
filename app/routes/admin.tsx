@@ -32,7 +32,13 @@ export const loader: LoaderFunction = async ({ request }) => {
       error = balanceError.response?.data?.error || "Failed to fetch balances";
     }
     
-    return json({ user, balances, apiUrl: process.env.API_URL, token: user.token, error });
+    // Ensure API_URL is defined before returning it
+    const apiUrl = process.env.API_URL || '';
+    if (!apiUrl) {
+      console.warn('API URL is not defined. Some features may not work correctly.');
+    }
+    
+    return json({ user, balances, apiUrl, token: user.token, error });
   } catch (error) {
     console.error("Error processing user data:", error);
     return redirect("/signin");
@@ -53,7 +59,12 @@ export default function Admin() {
     } else if (!data.user) {
       navigate('/signin');
     }
-  }, [data.user, user, setUser, navigate]);
+    
+    // Check if apiUrl is available
+    if (!data.apiUrl) {
+      console.warn('API URL is not defined. Some features may not work correctly.');
+    }
+  }, [data.user, user, setUser, navigate, data.apiUrl]);
 
   if (!user || !user.isAuthorized) {
     return <div>Error: User not authorized. Please <a href="/signin">sign in</a> again.</div>;
@@ -74,7 +85,7 @@ export default function Admin() {
   };
 
   return (
-    <UserProvider initialUser={user}>
+    <UserProvider initialUser={data.user}>
       <div className="dashboard">
         <aside className="sidebar">
           <h1>Mozart</h1>
@@ -88,6 +99,7 @@ export default function Admin() {
               <li><Link to="/admin/request">Request Money</Link></li>
               <li><Link to="/admin/identity">Identity Verification</Link></li>
               <li><Link to="/admin/manage">Manage Requests</Link></li>
+              <li><Link to="/admin/oas">OAs</Link></li>
             </ul>
           </nav>
         </aside>

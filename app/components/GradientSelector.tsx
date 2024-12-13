@@ -7,10 +7,15 @@ const gradients = [
   { name: 'Forest', light: '#56ab2f, #a8e063', dark: '#000000, #0f9b0f' },
 ];
 
-const GradientSelector = ({ isDarkMode, onSelectGradient }) => {
+interface GradientSelectorProps {
+  isDarkMode: boolean;
+  onSelectGradient: (gradient: typeof gradients[0]) => void;
+}
+
+const GradientSelector: React.FC<GradientSelectorProps> = ({ isDarkMode, onSelectGradient }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleSelectGradient = (gradient) => {
+  const handleSelectGradient = (gradient: typeof gradients[0]) => {
     onSelectGradient(gradient);
     setIsOpen(false);
   };
@@ -41,4 +46,3 @@ const GradientSelector = ({ isDarkMode, onSelectGradient }) => {
 };
 
 export default GradientSelector;
-

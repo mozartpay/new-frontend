@@ -13,9 +13,14 @@ import banner from '~/assets/img/auth/banner.png';
 import avatar from '~/assets/img/avatars/avatar2.png';
 
 // Add this import at the top of the file
-
+import type { User } from '~/types/user';
 
 const DEFAULT_CURRENCIES = ['XLM', 'USDC', 'EURC'];
+
+const NETWORK_OPTIONS = [
+  { value: 'https://horizon.stellar.org', label: 'Mainnet', description: 'Production network for real transactions' },
+  { value: 'https://horizon-testnet.stellar.org', label: 'Testnet', description: 'Test network for development and testing' }
+];
 
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
@@ -73,6 +78,12 @@ export default function AdminProfile() {
   const fetcher = useFetcher();
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
   const [userImage, setUserImage] = useState<string | null>(null);
+  const [networkChangeMessage, setNetworkChangeMessage] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -212,6 +223,67 @@ export default function AdminProfile() {
     }
   }, [confirmationMessage]);
 
+  const handlePreferredNetworkChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newPreferredNetwork = event.target.value;
+    
+    try {
+      const response = await axios.post(`${apiUrl}/profile/preferredNetwork`, {
+        email: user.email,
+        preferredNetwork: newPreferredNetwork
+      });
+
+      if (response.data.message === 'Preferred network updated successfully') {
+        setUser(prevUser => ({ ...prevUser, preferredNetwork: newPreferredNetwork }));
+        setNetworkChangeMessage(`Network changed to ${NETWORK_OPTIONS.find(opt => opt.value === newPreferredNetwork)?.label}`);
+      }
+    } catch (error) {
+      console.error('Error updating preferred network:', error);
+      setError('Failed to update preferred network. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    if (networkChangeMessage) {
+      const timer = setTimeout(() => {
+        setNetworkChangeMessage(null);
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [networkChangeMessage]);
+
+  const renderPrivateKeySection = () => {
+    if (!isClient) {
+      return <div>Loading...</div>;
+    }
+
+    return (
+      <div className="profile-section">
+        <h3>Private Key</h3>
+        <div className="key-container" style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
+          <span 
+            className={isPrivateKeyBlurred ? 'blurred' : ''} 
+            style={{ 
+              flex: 1, 
+              padding: '10px', 
+              backgroundColor: '#f0f0f0', 
+              borderRadius: '4px',
+              filter: isPrivateKeyBlurred ? 'blur(5px)' : 'none'
+            }}
+          >
+            {loadingPrivateKey ? 'Loading...' : (privateKey ? truncateKey(privateKey) : 'Hidden')}
+          </span>
+          <button onClick={togglePrivateKeyBlur} disabled={loadingPrivateKey} style={{ marginLeft: '10px' }}>
+            {isPrivateKeyBlurred ? 'Show' : 'Hide'}
+          </button>
+          {!isPrivateKeyBlurred && privateKey && (
+            <button onClick={() => copyToClipboard(privateKey)} style={{ marginLeft: '10px' }}>Copy</button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   if (!user) {
     return <div>Loading...</div>;
   }
@@ -277,29 +349,7 @@ export default function AdminProfile() {
           </div>
         </div>
 
-        <div className="profile-section">
-          <h3>Private Key</h3>
-          <div className="key-container" style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
-            <span 
-              className={isPrivateKeyBlurred ? 'blurred' : ''} 
-              style={{ 
-                flex: 1, 
-                padding: '10px', 
-                backgroundColor: '#f0f0f0', 
-                borderRadius: '4px',
-                filter: isPrivateKeyBlurred ? 'blur(5px)' : 'none'
-              }}
-            >
-              {loadingPrivateKey ? 'Loading...' : (privateKey ? truncateKey(privateKey) : 'Hidden')}
-            </span>
-            <button onClick={togglePrivateKeyBlur} disabled={loadingPrivateKey} style={{ marginLeft: '10px' }}>
-              {isPrivateKeyBlurred ? 'Show' : 'Hide'}
-            </button>
-            {!isPrivateKeyBlurred && privateKey && (
-              <button onClick={() => copyToClipboard(privateKey)} style={{ marginLeft: '10px' }}>Copy</button>
-            )}
-          </div>
-        </div>
+        {renderPrivateKeySection()}
 
         <div className="profile-section">
           <h3>Preferred Currency</h3>
@@ -342,6 +392,60 @@ export default function AdminProfile() {
               </motion.div>
             )}
           </AnimatePresence>
+        </div>
+
+        <div className="profile-section">
+          <h3>Preferred Network</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+            <select
+              name="preferredNetwork"
+              value={user.preferredNetwork || ''}
+              onChange={handlePreferredNetworkChange}
+              style={{ 
+                padding: '10px',
+                borderRadius: '4px',
+                border: '1px solid #ccc'
+              }}
+            >
+              <option value="">Select a network</option>
+              {NETWORK_OPTIONS.map((network) => (
+                <option key={network.value} value={network.value}>
+                  {network.label}
+                </option>
+              ))}
+            </select>
+            
+            {user.preferredNetwork && (
+              <div style={{ 
+                fontSize: '0.9em', 
+                color: '#666',
+                padding: '10px',
+                backgroundColor: '#f5f5f5',
+                borderRadius: '4px'
+              }}>
+                {NETWORK_OPTIONS.find(opt => opt.value === user.preferredNetwork)?.description}
+              </div>
+            )}
+
+            <AnimatePresence>
+              {networkChangeMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.3 }}
+                  style={{
+                    padding: '10px',
+                    backgroundColor: '#4CAF50',
+                    color: 'white',
+                    borderRadius: '4px',
+                  }}
+                >
+                  {networkChangeMessage}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 

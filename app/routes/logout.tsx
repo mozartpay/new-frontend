@@ -25,7 +25,7 @@ async function handleLogout(request: Request) {
 
   return redirect('/', {
     headers: {
-      "Set-Cookie": clearCookieHeaders
+      "Set-Cookie": clearCookieHeaders.join(', ')
     }
   });
 }

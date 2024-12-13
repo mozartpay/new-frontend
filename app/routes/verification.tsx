@@ -3,13 +3,19 @@ import { json, redirect } from '@remix-run/node';
 import { useLoaderData, useSubmit, Form } from '@remix-run/react';
 import { getUserFromSession } from '~/sessions';
 import'../styles/verification.css';
+import type { LoaderFunction } from '@remix-run/node';
+import { ActionFunctionArgs } from '@remix-run/node';
 
-export const loader = async ({ request }) => {
+export const loader: LoaderFunction = async ({ request }) => {
   try {
     const user = await getUserFromSession(request);
     
     if (!user || !user.email) {
       return redirect("/signin");
+    }
+    
+    if (user.isPhoneVerified) {
+      return redirect("/admin");
     }
     
     return json({ email: user.email });
@@ -19,7 +25,7 @@ export const loader = async ({ request }) => {
   }
 };
 
-export const action = async ({ request }) => {
+export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     const user = await getUserFromSession(request);
 

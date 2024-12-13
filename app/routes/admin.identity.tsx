@@ -67,7 +67,7 @@ export default function AdminIdentity() {
     const formData = new FormData();
     formData.append('documentType', selectedDocumentType);
     formData.append('document', image);
-    formData.append('email', user.email);
+    formData.append('email', user?.email || '');
 
     try {
       const response = await axios.post(`${process.env.API_URL}/identity`, formData, {

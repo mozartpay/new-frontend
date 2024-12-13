@@ -65,6 +65,9 @@ export default function AdminWithdraw() {
 
   const fetchBalances = async () => {
     try {
+      if (!user || !user.email) {
+        throw new Error('User or email is not available');
+      }
       const response = await axios.get(
         `${apiUrl}/balance?email=${encodeURIComponent(user.email)}`,
         { headers: { 'Content-Type': 'application/json' } }
@@ -108,6 +111,9 @@ export default function AdminWithdraw() {
   const submitWithdrawRequest = async () => {
     setLoading(true);
     try {
+      if (!user) {
+        throw new Error('User is not available');
+      }
       await axios.post(
         'https://mozart-api-21ea5fd801a8.herokuapp.com/api/withdraw',
         {

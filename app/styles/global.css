@@ -1,15 +1,12 @@
 :root {
-  /* Existing variables */
   --title-color: #2D3748;
   --text-color: #4A5568;
   --highlight-color: #F56565;
 
-  /* Light mode gradients */
   --gradient-light-start: #ced7f3;
   --gradient-light-middle: #93c5fd;
   --gradient-light-end: #0c6ff0;
 
-  /* Dark mode gradients */
   --gradient-dark-start: #1e293b;
   --gradient-dark-middle: #334155;
   --gradient-dark-end: #0f172a;

@@ -68,6 +68,8 @@ export default function AdminSend() {
 
   const fetchBalances = async () => {
     try {
+      if (!user || !user.email) return;
+
       const response = await axios.get(
         `${apiUrl}/balance?email=${encodeURIComponent(user.email)}`, 
         { headers: { 'Content-Type': 'application/json' } }
@@ -104,7 +106,7 @@ export default function AdminSend() {
   };
 
   const handleSend = async () => {
-    if (!receiverEmail || !receiverName) {
+    if (!receiverEmail || !receiverName || !user) {
       setShowErrorModal(true);
       return;
     }
@@ -210,7 +212,7 @@ export default function AdminSend() {
 
       <button
         onClick={handleForwardClick}
-        disabled={!amount || amount <= 0 || !sourceCurrency || amountError !== ''}
+        disabled={!amount || Number(amount) <= 0 || !sourceCurrency || amountError !== ''}
         className="send-button"
       >
         Forward

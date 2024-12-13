@@ -4,6 +4,7 @@ import { Link as RemixLink, useNavigate, useFetcher, useMatches } from "@remix-r
 import logo from '../../assets/img/home/mozart.png';
 import { useUser } from '~/context/UserContext';
 import { DarkModeContext } from '~/routes/blog';
+import type { User } from '~/types/user';
 
 interface NavProps {
   isDarkMode: boolean;
@@ -17,19 +18,17 @@ export default function Nav({ isDarkMode, onToggleDarkMode }: NavProps) {
   const darkModeContext = useContext(DarkModeContext);
   const fetcher = useFetcher();
   const matches = useMatches();
-  const [currentUser, setCurrentUser] = useState(user);
+
+  // Update the RootLoaderData type
+  type RootLoaderData = { user?: User };
 
   // Update user context when root loader data changes
   useEffect(() => {
-    const rootLoaderData = matches[0]?.data;
+    const rootLoaderData = matches[0]?.data as RootLoaderData;
     if (rootLoaderData && rootLoaderData.user) {
-      // setUser(rootLoaderData.user);
+      setUser(rootLoaderData.user);
     }
-  }, [matches]);
-
-  useEffect(() => {
-    setCurrentUser(user);
-  }, [user]);
+  }, [matches, setUser]);
 
   const onToggle = () => {
     setIsOpen(!isOpen);
@@ -50,7 +49,7 @@ export default function Nav({ isDarkMode, onToggleDarkMode }: NavProps) {
       style={{ overflow: 'hidden', padding: '16px', backgroundColor: isDarkMode ? '#2d3748' : '#f9f9f9' }}
     >
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {currentUser ? (
+        {user ? (
           <>
             <RemixLink to="/admin/profile" style={{ textDecoration: 'none', color: isDarkMode ? '#f7fafc' : '#4A5568', fontSize: '18px' }}>
               Profile
@@ -128,16 +127,16 @@ export default function Nav({ isDarkMode, onToggleDarkMode }: NavProps) {
               animate={{ opacity: 1 }}
               transition={{ duration: 1 }}
             >
-              <RemixLink to={currentUser ? "/admin" : "/"}>
+              <RemixLink to={user ? "/admin" : "/"}>
                 <img src={logo} style={{ width: '100px', height: 'auto' }} alt="Logo" />
               </RemixLink>
             </motion.div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            {currentUser ? (
+            {user ? (
               <>
-                <div style={{ marginRight: '16px' }}>Welcome, {currentUser.name}</div>
+                <div style={{ marginRight: '16px' }}>Welcome, {user.email ?? 'User'}</div>
                 <button
                   onClick={handleLogout}
                   style={{

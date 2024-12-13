@@ -84,6 +84,10 @@ export default function AdminRequest() {
 
     setIsRequesting(true);
     try {
+      if (!user) {
+        throw new Error("User is not authenticated");
+      }
+
       const response = await axios.post(
         `${process.env.API_URL}/request`,
         {
@@ -173,7 +177,7 @@ export default function AdminRequest() {
 
       <button
         onClick={handleForwardClick}
-        disabled={!amount || amount <= 0 || amountError !== ''}
+        disabled={!amount || Number(amount) <= 0 || amountError !== ''}
         className="request-button"
       >
         Forward
