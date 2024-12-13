@@ -1,10 +1,13 @@
 import { useState, ChangeEvent, useEffect } from 'react';
 import { json, redirect } from '@remix-run/node';
-import { useLoaderData, useSubmit, Form } from '@remix-run/react';
-import { getUserFromSession } from '~/sessions';
+import { useLoaderData, useFetcher, useNavigate } from '@remix-run/react';
+import { getUserFromSession, createUserSession } from '~/sessions';
 import'../styles/verification.css';
 import type { LoaderFunction } from '@remix-run/node';
 import { ActionFunctionArgs } from '@remix-run/node';
+import { useUser } from '~/context/UserContext';
+
+type ActionData = { error?: string, success?: boolean };
 
 export const loader: LoaderFunction = async ({ request }) => {
   try {
@@ -30,7 +33,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const user = await getUserFromSession(request);
 
     if (!user || !user.email) {
-      return redirect("/signin");
+      return json({ error: 'Please sign in again.' }, { status: 400 });
     }
 
     const formData = await request.formData();
@@ -45,19 +48,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email: user.email, code }),
+      body: JSON.stringify({ 
+        email: user.email, 
+        code: code.toString() 
+      }),
     });
 
     const data = await response.json();
-
-    if (response.ok && data.message === 'Verification code is valid.') {
-      return redirect('/admin');
+    
+    if (response.ok && data.message === 'Phone number verified successfully.') {
+      const updatedUser = {
+        ...user,
+        isPhoneVerified: true
+      };
+      
+      return createUserSession(JSON.stringify(updatedUser), '/admin');
     } else {
-      return json({ error: data.message || 'Invalid verification code.' }, { status: 400 });
+      return json({ 
+        error: data.message || 'Invalid or expired verification code. Please try again.' 
+      }, { status: 400 });
     }
   } catch (error) {
     console.error("Error in verification action:", error);
-    return json({ error: 'An error occurred during verification.' }, { status: 500 });
+    return json({ 
+      error: 'An error occurred during verification. Please try again.' 
+    }, { status: 500 });
   }
 };
 
@@ -74,26 +89,48 @@ function useHydrated() {
 export default function Verify() {
   const { email } = useLoaderData<{ email: string }>();
   const [code, setCode] = useState<string>('');
-  const submit = useSubmit();
+  const fetcher = useFetcher<ActionData>();
+  const navigate = useNavigate();
+  const { user, refreshUser } = useUser();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (fetcher.data?.success) {
+      refreshUser().then(() => {
+        navigate('/admin');
+      });
+    }
+  }, [fetcher.data?.success]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submit(event.currentTarget, { replace: true });
+    const form = event.currentTarget;
+    fetcher.submit(form);
   };
 
-  const isHydrated = useHydrated();
+  const error = fetcher.data?.error;
 
-  if (isHydrated) {
-    return (
-      <div className="verification-container">
-        <div className="verification-content">
-          <h1 className="verification-title">Account Verification</h1>
-          <p className="verification-description">
-            Please enter the Verification Code that has been sent to your phone number!
-          </p>
-        </div>
+  // Return a consistent initial structure that matches the server render
+  return (
+    <div className="verification-container">
+      <div className="verification-content">
+        <h1 className="verification-title">Account Verification</h1>
+        <p className="verification-description">
+          Please enter the Verification Code that has been sent to your phone number!
+        </p>
+        {error && (
+          <div className="error-message">
+            {error}
+          </div>
+        )}
+      </div>
+      {mounted && (
         <div className="verification-form-container">
-          <Form method="post" onSubmit={handleSubmit} className="verification-form">
+          <fetcher.Form method="post" onSubmit={handleSubmit} className="verification-form">
             <div className="form-group">
               <label htmlFor="code" className="form-label">
                 Verification Code<span className="required">*</span>
@@ -113,11 +150,9 @@ export default function Verify() {
             <button type="submit" className="submit-button">
               Verify
             </button>
-          </Form>
+          </fetcher.Form>
         </div>
-      </div>
-    );
-  }
-
-  return null;
+      )}
+    </div>
+  );
 }

@@ -13,9 +13,16 @@ export interface UserContextType {
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   logout: () => void;
   updatePreferredCurrency: (currency: string) => void;
+  refreshUser: () => Promise<void>;
 }
 
-const UserContext = createContext<UserContextType | null>(null);
+export const UserContext = createContext<UserContextType>({
+  user: null,
+  setUser: () => {},
+  logout: () => {},
+  updatePreferredCurrency: () => {},
+  refreshUser: async () => {},
+});
 
 export const UserProvider: React.FC<{ children: ReactNode; initialUser: User }> = ({ children, initialUser }) => {
   const [user, setUser] = useState<User | null>(initialUser);
@@ -41,8 +48,14 @@ export const UserProvider: React.FC<{ children: ReactNode; initialUser: User }> 
     setUser(prevUser => prevUser ? { ...prevUser, preferredCurrency: currency } : null);
   };
 
+  const refreshUser = async () => {
+    // Add logic to refresh user data if needed
+    // For now just forcing a re-render with current user
+    setUser({ ...user! });
+  };
+
   return (
-    <UserContext.Provider value={{ user, setUser, logout, updatePreferredCurrency }}>
+    <UserContext.Provider value={{ user, setUser, logout, updatePreferredCurrency, refreshUser }}>
       {children}
     </UserContext.Provider>
   );

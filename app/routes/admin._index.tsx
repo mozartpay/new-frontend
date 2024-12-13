@@ -27,7 +27,7 @@ export default function AdminIndex() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user && user.isPhoneVerified === false) {
+    if (user && user.isPhoneVerified === false && window.location.pathname !== '/verification') {
       navigate('/verification');
     }
   }, [user, navigate]);
