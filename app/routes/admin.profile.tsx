@@ -50,20 +50,43 @@ export const loader: LoaderFunction = async ({ request }) => {
   }
 };
 
+// Type definition for form data
+type ProfileFormData = {
+  hideBalances?: boolean;
+  currency?: string;
+  network?: string;
+  preferredCurrency?: string;
+};
+
 export const action: ActionFunction = async ({ request }) => {
-    const session = await getSession(request);
-    const formData = await request.formData();
-    const preferredCurrency = formData.get("preferredCurrency") as string;
+    type ActionFormData = ProfileFormData;  // Use our ProfileFormData type for the action
+    
+    try {
+        const session = await getSession(request);
+        const formData = await request.formData();
+        const preferredCurrency = formData.get("preferredCurrency") as string;
 
-    let user = JSON.parse(decrypt(session.get("user")));
-    user.preferredCurrency = preferredCurrency;
-    session.set("user", encrypt(JSON.stringify(user)));
+        const encryptedUser = session.get("user");
+        if (!encryptedUser) {
+            throw new Error("No user found in session");
+        }
 
-    return json({ success: true, preferredCurrency }, {
-        headers: {
-            "Set-Cookie": await commitSession(session),
-        },
-    });
+        let user = JSON.parse(decrypt(encryptedUser));
+        user.preferredCurrency = preferredCurrency;
+        session.set("user", encrypt(JSON.stringify(user)));
+
+        return json({ success: true, preferredCurrency }, {
+            headers: {
+                "Set-Cookie": await commitSession(session),
+            },
+        });
+    } catch (error) {
+        console.error("Action error:", error);
+        return json({ 
+            success: false, 
+            error: "Failed to update preferred currency" 
+        }, { status: 400 });
+    }
 };
 
 export default function AdminProfile() {
@@ -74,7 +97,7 @@ export default function AdminProfile() {
   const [loadingPrivateKey, setLoadingPrivateKey] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-  const { updatePreferredCurrency } = useUser();
+  const { updatePreferences } = useUser();
   const fetcher = useFetcher();
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
   const [userImage, setUserImage] = useState<string | null>(null);
@@ -167,25 +190,26 @@ export default function AdminProfile() {
     const newPreferredCurrency = event.target.value;
     
     try {
-      const response = await axios.post(`${apiUrl}/api/profile/preferredCurrency`, {
+      const response = await axios.post(`${apiUrl}/profile/preferredCurrency`, {
         email: user.email,
         preferredCurrency: newPreferredCurrency
       });
-
-      if (response.data.message === 'Preferred currency updated successfully') {
-        updatePreferredCurrency(newPreferredCurrency);
+      if (response.data?.message || response.data?.success) {
+        updatePreferences({ currency: newPreferredCurrency });
         setUser(prevUser => ({ ...prevUser, preferredCurrency: newPreferredCurrency }));
         setConfirmationMessage(`Preferred currency set to ${newPreferredCurrency}`);
         
         // Update the session
         fetcher.submit(
-          { preferredCurrency: newPreferredCurrency },
+          { preferredCurrency: newPreferredCurrency } as ProfileFormData,
           { method: "post" }
         );
+      } else {
+        throw new Error('Invalid response from server');
       }
     } catch (error) {
       console.error('Error updating preferred currency:', error);
-      setError('Failed to update preferred currency. Please try again.');
+      setError(error instanceof Error ? error.message : 'Failed to update preferred currency. Please try again.');
     }
   };
 

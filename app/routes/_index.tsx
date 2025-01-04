@@ -1,39 +1,31 @@
-import { LoaderFunction } from "@remix-run/node";
-import { useLoaderData, json, Link } from "@remix-run/react";
+import { json, redirect, LoaderFunction } from "@remix-run/node";
+import { useLoaderData, Link } from "@remix-run/react";
 import { useRef, useState, useEffect } from "react";
 import { motion, useAnimation } from "framer-motion";
 import Features from "~/components/landing/features";
 import Industries from "~/components/landing/industries";
 import Pricing from "~/components/landing/pricing";
 import "../styles/global.css";
-import { createCookie } from "@remix-run/node";
 import { decrypt } from '~/utils/encryption';
 import GradientSelector from '~/components/GradientSelector';
 import { WorldMap } from '../components/WorldMap'; 
-// import Layout from '../components/layout/index'; // Add this import if you have a ThemeContext
+import { getUserFromSession } from "~/sessions";
 
-const userCookie = createCookie("user", {
-  maxAge: 604_800, // one week
-  secure: process.env.NODE_ENV === "production",
-  httpOnly: true,
-  sameSite: "lax",
-});
+// Define the type for loader data
+type LoaderData = {
+  user: any | null;
+};
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const cookieHeader = request.headers.get("Cookie");
-  const userCookieValue = await userCookie.parse(cookieHeader);
+  const user = await getUserFromSession(request);
   
-  let user = null;
-  if (userCookieValue) {
-    try {
-      const decryptedUser = decrypt(userCookieValue);
-      user = decryptedUser ? JSON.parse(decryptedUser) : null;
-    } catch (error) {
-      console.error("Error decrypting user data:", error);
-    }
+  // If user is logged in, redirect to admin
+  if (user?.isAuthorized) {
+    return redirect("/admin");
   }
-
-  return json({ user });
+  
+  // Return null user for non-authenticated users
+  return json<LoaderData>({ user: null });
 };
 
 function useIntersectionObserver(ref: React.RefObject<Element>, options: IntersectionObserverInit) {
@@ -81,11 +73,19 @@ export default function Home() {
   const videoControls = useAnimation();
 
   const [isClient, setIsClient] = useState(false);
-  const { user } = useLoaderData<{ user: any }>();
+  const { user } = useLoaderData<LoaderData>();
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
+    
+    // Initialize dark mode from local storage or system preference
+    const stored = localStorage.getItem('darkMode');
+    if (stored !== null) {
+      setIsDarkMode(stored === 'true');
+    } else {
+      setIsDarkMode(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
     
     titleControls.start('visible');
     textControls.start('visible');
@@ -104,7 +104,7 @@ export default function Home() {
 
   return (
     <div style={{ position: 'relative', overflow: 'hidden' }}>
-      <WorldMap />
+      <WorldMap isDarkMode={isDarkMode} />
       <div style={{ 
         maxWidth: '1280px', 
         margin: '0 auto', 

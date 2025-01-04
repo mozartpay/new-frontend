@@ -5,23 +5,23 @@ import { useLoaderData, useNavigate } from '@remix-run/react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import "~/styles/oas.css";
+import { initializeVault, createSorobanContext } from '~/lib/defindex-wrapper';
 
 export const loader = async ({ request }: { request: Request }) => {
     const user = await getUserFromSession(request);
-    if (!user) {
-      return redirect('/login');
+    if (!user?.email) {
+        return redirect('/login');
     }
   
     return json({ 
       email: user.email,
-      apiUrl: process.env.API_URL
+      apiUrl: process.env.LOCAL_API_URL
     });
 };
 
 export default function OAs() {
   const { email, apiUrl } = useLoaderData() as { email: string; apiUrl: string };
   const navigate = useNavigate();
-
   const [selectedAction, setSelectedAction] = useState('');
   const [inputData, setInputData] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -30,6 +30,49 @@ export default function OAs() {
   const [errorMessage, setErrorMessage] = useState('');
   const [showExample, setShowExample] = useState(false);
   const [isAddressBlurred, setIsAddressBlurred] = useState(true);
+  const [agreement, setAgreement] = useState<any>(null);
+  const [balance, setBalance] = useState<string>('');
+  const [vault, setVault] = useState<any>(null);
+  const [sorobanContext, setSorobanContext] = useState<any>(null);
+
+  useEffect(() => {
+    const initializeDefindex = async () => {
+      console.debug('[OAS] Starting Defindex initialization');
+      try {
+        const contractId = 'GBZX4Y3JAZ4MPNYABG3TE47Q4S73UHGNZXWC6OTC5NKYQSWORMRQ7SVW';
+        console.debug('[OAS] Initializing vault with contract ID:', contractId);
+        
+        const newVault = await initializeVault(contractId);
+        console.debug('[OAS] Vault initialization result:', { success: !!newVault });
+        
+        if (newVault) {
+          setVault(newVault);
+          console.debug('[OAS] Vault state updated successfully');
+        } else {
+          console.warn('[OAS] Failed to initialize vault - newVault is null');
+        }
+
+        console.debug('[OAS] Creating Soroban context');
+        const newContext = await createSorobanContext();
+        console.debug('[OAS] Soroban context creation result:', { success: !!newContext });
+        
+        if (newContext) {
+          setSorobanContext(newContext);
+          console.debug('[OAS] Soroban context state updated successfully');
+        } else {
+          console.warn('[OAS] Failed to create Soroban context - newContext is null');
+        }
+      } catch (error) {
+        console.error('[OAS] Error in initializeDefindex:', error);
+        setErrorMessage('Failed to initialize Defindex SDK. Please try again later.');
+      }
+    };
+
+    // Only run initialization on the client side
+    if (typeof window !== 'undefined') {
+      initializeDefindex();
+    }
+  }, []);
 
   useEffect(() => {
     fetchPublicKey();
@@ -49,27 +92,102 @@ export default function OAs() {
       return;
     }
 
+    if (!publicKey && selectedAction === 'createAgreement') {
+      setErrorMessage('Contract ID (public key) is required to create an agreement. Please wait for it to load.');
+      return;
+    }
+
     try {
-      let xmlData;
-      if (uploadType === 'transactionXml') {
-        xmlData = inputData;
-      } else if (uploadType === 'json') {
-        // Convert JSON to XML format if needed
-        const jsonData = JSON.parse(inputData);
-        // Add logic to convert JSON to expected XML format
+      // Reset previous states
+      setErrorMessage('');
+      setSuccessMessage('');
+      setAgreement(null);
+      setBalance('');
+
+      // For getAgreement, check the balance using defindex-sdk
+      if (selectedAction === 'getAgreement' && publicKey && vault && sorobanContext) {
+        try {
+          // Update the context with the current address
+          const currentContext = {
+            ...sorobanContext,
+            address: publicKey
+          };
+          
+          const vaultBalance = await vault.balance(publicKey, currentContext);
+          if (vaultBalance) {
+            console.log('Vault balance:', vaultBalance);
+            setBalance(vaultBalance.toString());
+          }
+        } catch (e) {
+          console.error('Error fetching vault balance:', e);
+        }
+      }
+
+      // Convert all input types to XML format
+      let xmlString = '';
+      
+      switch (uploadType) {
+        case 'transactionXml':
+          xmlString = inputData;
+          break;
+        case 'json':
+          try {
+            const jsonData = JSON.parse(inputData);
+            xmlString = `<?xml version="1.0" encoding="UTF-8"?>
+<Document>
+  <Agreement>
+    <ContractID>${jsonData.contractId || publicKey}</ContractID>
+    <Terms>${jsonData.terms || ''}</Terms>
+    <CreatedBy>${jsonData.createdBy || email}</CreatedBy>
+  </Agreement>
+</Document>`;
+          } catch (e) {
+            setErrorMessage('Invalid JSON format. Please check your input.');
+            return;
+          }
+          break;
+        case 'contractId':
+          xmlString = `<?xml version="1.0" encoding="UTF-8"?>
+<Document>
+  <Agreement>
+    <ContractID>${inputData.trim()}</ContractID>
+  </Agreement>
+</Document>`;
+          break;
+        case 'xdr':
+          xmlString = `<?xml version="1.0" encoding="UTF-8"?>
+<Document>
+  <Agreement>
+    <ContractID>${publicKey}</ContractID>
+    <Terms>XDR Agreement</Terms>
+    <CreatedBy>${email}</CreatedBy>
+  </Agreement>
+</Document>`;
+          break;
+        default:
+          setErrorMessage('Invalid upload type');
+          return;
       }
 
       const endpoint = getEndpointForAction(selectedAction);
       const response = await axios.post(`${apiUrl}${endpoint}`, {
-        xmlData
+        xmlData: xmlString
       }, {
         headers: { 'Content-Type': 'application/json' },
       });
 
-      setSuccessMessage(response.data.message);
-      setSelectedAction('');
-      setInputData('');
-      setUploadType('');
+      if (response.data.agreement) {
+        setAgreement(response.data.agreement);
+        setSuccessMessage(`Agreement ${response.data.agreement.contractID} ${selectedAction === 'createAgreement' ? 'created' : 'retrieved'} successfully`);
+      } else {
+        setSuccessMessage(response.data.message);
+      }
+      
+      if (selectedAction !== 'getAgreement') {
+        setSelectedAction('');
+        setInputData('');
+        setUploadType('');
+      }
     } catch (error: any) {
       setErrorMessage(error.response?.data?.error || 'Error processing agreement');
       console.error('Error processing agreement:', error);
@@ -78,11 +196,11 @@ export default function OAs() {
 
   const getEndpointForAction = (action: string): string => {
     const endpoints: Record<string, string> = {
-      'getAgreement': '/get-agreement',
-      'createAgreement': '/create-agreement',
-      'signAgreement': '/sign-agreement',
-      'updateAgreement': '/update-agreement',
-      'cancelAgreement': '/cancel-agreement'
+      'getAgreement': '/oas/get-agreement',
+      'createAgreement': '/oas/create-agreement',
+      'signAgreement': '/oas/sign-agreement',
+      'updateAgreement': '/oas/update-agreement',
+      'cancelAgreement': '/oas/cancel-agreement'
     };
     return endpoints[action] || '';
   };
@@ -92,8 +210,17 @@ export default function OAs() {
   };
 
   const handleUploadTypeChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setUploadType(event.target.value);
-    if (event.target.value) {
+    const selectedType = event.target.value;
+    setUploadType(selectedType);
+    
+    // Set Contract Address as default Contract ID
+    if (selectedType === 'contractId' && publicKey) {
+      setInputData(publicKey);
+    } else {
+      setInputData('');
+    }
+
+    if (selectedType) {
       setShowExample(true);
     }
   };
@@ -116,32 +243,24 @@ export default function OAs() {
   const getExampleData = (type: string) => {
     switch (type) {
       case 'contractId':
-        return 'OA_12345678';
+        return publicKey || 'Enter Contract ID';
       case 'transactionXml':
-        return `<transaction>
-  <id>TX_123456</id>
-  <agreement>
-    <type>SERVICE_AGREEMENT</type>
-    <parties>
-      <party>COMPANY_A</party>
-      <party>COMPANY_B</party>
-    </parties>
-  </agreement>
-</transaction>`;
+        return `<?xml version="1.0" encoding="UTF-8"?>
+<Document>
+  <Agreement>
+    <ContractID>${publicKey || '[Your Contract ID]'}</ContractID>
+    <Terms>Standard service agreement terms</Terms>
+    <CreatedBy>${email}</CreatedBy>
+  </Agreement>
+</Document>`;
       case 'xdr':
         return 'AAAAAGL9kh4B......HeFk=';
       case 'json':
-        return `{
-  "agreementType": "SERVICE_AGREEMENT",
-  "parties": [
-    { "name": "Company A", "role": "provider" },
-    { "name": "Company B", "role": "client" }
-  ],
-  "terms": {
-    "duration": "12 months",
-    "value": "5000 USD"
-  }
-}`;
+        return JSON.stringify({
+          contractId: publicKey || '[Your Contract ID]',
+          terms: "Standard service agreement terms",
+          createdBy: email
+        }, null, 2);
       default:
         return '';
     }
@@ -153,8 +272,61 @@ export default function OAs() {
     return `${address.slice(0, 5)}...${address.slice(-5)}`;
   };
 
+  const styles = {
+    container: {
+      padding: '20px',
+      maxWidth: '1200px',
+      margin: '0 auto',
+    },
+    errorMessage: {
+      backgroundColor: '#fee2e2',
+      color: '#dc2626',
+      padding: '1rem',
+      borderRadius: '0.375rem',
+      marginBottom: '1rem',
+    },
+    successMessage: {
+      backgroundColor: '#dcfce7',
+      color: '#16a34a',
+      padding: '1rem',
+      borderRadius: '0.375rem',
+      marginBottom: '1rem',
+    },
+    agreementDetails: {
+      backgroundColor: '#fff',
+      borderRadius: '0.5rem',
+      padding: '1.5rem',
+      boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+      marginTop: '2rem',
+    },
+    agreementContent: {
+      marginTop: '1rem',
+    },
+    agreementJson: {
+      backgroundColor: '#f8fafc',
+      padding: '1rem',
+      borderRadius: '0.375rem',
+      overflow: 'auto',
+      fontSize: '0.875rem',
+      fontFamily: 'monospace',
+      marginTop: '1rem',
+    },
+    balanceDetails: {
+      backgroundColor: '#f0f9ff',
+      borderRadius: '0.5rem',
+      padding: '1.5rem',
+      boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+      marginTop: '1rem',
+      border: '1px solid #bae6fd'
+    },
+    balanceContent: {
+      fontSize: '1.25rem',
+      color: '#0369a1'
+    }
+  };
+
   return (
-    <div className="container">
+    <div style={styles.container}>
       <motion.h1 className="title" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
         Welcome to the OAs Management Portal
       </motion.h1>
@@ -204,9 +376,9 @@ export default function OAs() {
       </div>
 
       <div className="form-group">
-        <label htmlFor="upload-type" className="label">Select Upload Type:</label>
+        <label htmlFor="upload-type" className="label">Select Agreement Type:</label>
         <select id="upload-type" className="select" value={uploadType} onChange={handleUploadTypeChange}>
-          <option value="">Select Upload Type</option>
+          <option value="">Select Agreement Type</option>
           <option value="contractId">Contract ID</option>
           <option value="transactionXml">Transaction XML</option>
           <option value="xdr">XDR</option>
@@ -233,18 +405,40 @@ export default function OAs() {
         <button className="button primary" onClick={handleSubmit}>Submit</button>
       </div>
 
-      {successMessage && (
-        <motion.div className="success-alert" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <span>{successMessage}</span>
-          <button className="close-button" onClick={() => setSuccessMessage('')}>✕</button>
-        </motion.div>
+      {errorMessage && (
+        <div style={styles.errorMessage}>
+          {errorMessage}
+        </div>
       )}
 
-      {errorMessage && (
-        <motion.div className="error-alert" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-          <span>{errorMessage}</span>
-          <button className="close-button" onClick={() => setErrorMessage('')}>✕</button>
-        </motion.div>
+      {successMessage && (
+        <div style={styles.successMessage}>
+          {successMessage}
+        </div>
+      )}
+
+      {agreement && (
+        <div style={styles.agreementDetails}>
+          <h2>Agreement Details</h2>
+          <div style={styles.agreementContent}>
+            <p><strong>Contract ID:</strong> {agreement.contractID}</p>
+            <p><strong>Status:</strong> {agreement.status}</p>
+            <p><strong>Created By:</strong> {agreement.createdBy}</p>
+            <p><strong>Terms:</strong> {agreement.terms}</p>
+            <pre style={styles.agreementJson}>
+              {JSON.stringify(agreement, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
+
+      {balance && (
+        <div style={styles.balanceDetails}>
+          <h2>Vault Balance</h2>
+          <div style={styles.balanceContent}>
+            <p><strong>Balance:</strong> {balance}</p>
+          </div>
+        </div>
       )}
 
       {showExample && uploadType && (

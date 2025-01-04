@@ -23,14 +23,14 @@ export const links: LinksFunction = () => [
   { rel: "stylesheet", href: "../app/styles/global.css" }
 ];
 
-
 // Global loader
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
   return json({
     ENV: {
-      API_URL: process.env.API_URL,
-      user
+      NODE_ENV: process.env.NODE_ENV,
+      user,
+      API_URL: process.env.API_URL
     },
   });
 };
@@ -85,6 +85,11 @@ export default function App() {
           {!hasGivenConsent && <CookieConsent />}
           {/*  <LiveReload />*/}
         </UserProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.ENV = ${JSON.stringify(data.ENV)}`,
+          }}
+        />
       </body>
     </html>
   );

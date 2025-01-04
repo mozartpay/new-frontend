@@ -2,9 +2,15 @@ import React, { createContext, useState, useContext, ReactNode } from 'react';
 import { useNavigate } from '@remix-run/react';
 
 interface User {
-  // Define user properties here
   email: string;
+  token: string;
   isAuthorized: boolean;
+  isPhoneVerified: boolean;
+  preferences: {
+    hideBalances: boolean;
+    currency: string;
+    network: string;
+  };
   // Add other relevant properties
 }
 
@@ -12,16 +18,16 @@ export interface UserContextType {
   user: User | null;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   logout: () => void;
-  updatePreferredCurrency: (currency: string) => void;
   refreshUser: () => Promise<void>;
+  updatePreferences: (preferences: Partial<User['preferences']>) => void;
 }
 
 export const UserContext = createContext<UserContextType>({
   user: null,
   setUser: () => {},
   logout: () => {},
-  updatePreferredCurrency: () => {},
   refreshUser: async () => {},
+  updatePreferences: () => {},
 });
 
 export const UserProvider: React.FC<{ children: ReactNode; initialUser: User }> = ({ children, initialUser }) => {
@@ -31,21 +37,9 @@ export const UserProvider: React.FC<{ children: ReactNode; initialUser: User }> 
   const logout = () => {
     setUser(null);
     if (typeof window !== 'undefined') {
-      // Clear localStorage
-      localStorage.clear();
-      // Clear client-side cookies
-      document.cookie.split(";").forEach((c) => {
-        document.cookie = c
-          .replace(/^ +/, "")
-          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-      });
-      // Navigate to logout page and refresh
+      // Navigate to logout endpoint which will handle session cleanup
       window.location.href = '/logout';
     }
-  };
-
-  const updatePreferredCurrency = (currency: string) => {
-    setUser(prevUser => prevUser ? { ...prevUser, preferredCurrency: currency } : null);
   };
 
   const refreshUser = async () => {
@@ -54,8 +48,26 @@ export const UserProvider: React.FC<{ children: ReactNode; initialUser: User }> 
     setUser({ ...user! });
   };
 
+  const updatePreferences = (preferences: Partial<User['preferences']>) => {
+    setUser(prevUser => 
+      prevUser ? {
+        ...prevUser,
+        preferences: {
+          ...prevUser.preferences,
+          ...preferences
+        }
+      } : null
+    );
+  };
+
   return (
-    <UserContext.Provider value={{ user, setUser, logout, updatePreferredCurrency, refreshUser }}>
+    <UserContext.Provider value={{ 
+      user, 
+      setUser, 
+      logout, 
+      refreshUser,
+      updatePreferences 
+    }}>
       {children}
     </UserContext.Provider>
   );

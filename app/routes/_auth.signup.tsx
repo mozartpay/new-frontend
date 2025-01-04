@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useNavigate, Link } from "@remix-run/react";
 import { json, LoaderFunction, ActionFunction, redirect } from "@remix-run/node";
-import { createUserSession, getSession } from "~/sessions/index";
+import { createUserSession, getSession, checkAuthenticatedRedirect } from "~/sessions/index";
 import { useUser } from "~/context/UserContext";
 import PhoneInput from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const session = await getSession(request);
-  const userId = session.get("userId");
-  if (userId) {
-    return redirect('/admin');
-  }
+  // Check if user is already logged in and redirect if they are
+  await checkAuthenticatedRedirect(request);
+
   const apiUrl = process.env.API_URL;
   if (!apiUrl) {
     console.error("API_URL is not defined");

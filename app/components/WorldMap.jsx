@@ -232,7 +232,7 @@ function CityLabel({ position, name }) {
 }
 
 // Separate the 3D content into its own component
-function Globe() {
+function Globe({ isDarkMode }) {
   const groupRef = useRef();
   const rotationRef = useRef(0);
   const [nodes, setNodes] = useState([]);
@@ -336,13 +336,13 @@ function Globe() {
       {/* Base sphere */}
       <mesh>
         <sphereGeometry args={[2, 32, 32]} />
-        <meshBasicMaterial color="#1a237e" wireframe />
+        <meshBasicMaterial color={isDarkMode ? "#4f5b93" : "#1a237e"} wireframe />
       </mesh>
       
       {/* City nodes and labels */}
       {nodes.map((node, index) => (
         <group key={index}>
-          <MapNode position={node.position} color="#ff4444" />
+          <MapNode position={node.position} color={isDarkMode ? "#ff6b6b" : "#ff4444"} />
           <CityLabel position={node.position} name={node.name} />
         </group>
       ))}
@@ -363,7 +363,7 @@ function Globe() {
 }
 
 // Main WorldMap component that provides the Canvas
-export function WorldMap() {
+export function WorldMap({ isDarkMode }) {
   const [dpr, setDpr] = useState(1);
 
   // Use useEffect to set dpr on client-side only
@@ -381,12 +381,12 @@ export function WorldMap() {
     }}>
       <Canvas
         camera={{ position: [0, 0, 5], fov: 60 }}
-        dpr={dpr} // Use state value instead of direct window access
+        dpr={dpr}
         style={{ background: 'transparent' }}
         frameloop="always"
         performance={{ min: 0.5 }}
       >
-        <Globe />
+        <Globe isDarkMode={isDarkMode} />
       </Canvas>
     </div>
   );

@@ -2,19 +2,31 @@ import { vitePlugin as remix } from "@remix-run/dev";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { netlifyPlugin } from "@netlify/remix-adapter/plugin";
-// import { cssSideEffects } from 'vite-plugin-css-side-effects'; // Commented out
 
 export default defineConfig({
   plugins: [
     remix({
-      future: {
-        v3_fetcherPersist: true,
-        v3_relativeSplatPath: true,
-        v3_throwAbortReason: true,
-      },
+      ignoredRouteFiles: ["**/.*"],
+      appDirectory: "app",
+      assetsBuildDirectory: "public/build",
+      serverBuildPath: "build/index.js",
+      publicPath: "/build/",
     }),
     netlifyPlugin(),
     tsconfigPaths(),
-    // cssSideEffects(), // Commented out
   ],
+  optimizeDeps: {
+    include: ['defindex-sdk']
+  },
+  build: {
+    commonjsOptions: {
+      include: [/defindex-sdk/, /node_modules/],
+      transformMixedEsModules: true
+    }
+  },
+  server: {
+    fs: {
+      strict: false
+    }
+  }
 });

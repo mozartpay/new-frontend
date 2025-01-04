@@ -1,23 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useNavigate, Link } from '@remix-run/react';
 import { json, LoaderFunction, ActionFunction, redirect } from '@remix-run/node';
-import { createUserSession, getUserFromSession } from '~/sessions/index';
+import { createUserSession, checkAuthenticatedRedirect } from '~/sessions/index';
 import { useUser } from '~/context/UserContext';
 
 export const loader: LoaderFunction = async ({ request }) => {
-  const user = await getUserFromSession(request);
-  if (user) {
-    return redirect('/admin');
-  }
-
-  // Check for the presence of a login cookie
-  const cookieHeader = request.headers.get("Cookie");
-  const loginCookie = await getUserFromSession(request);
-  
-  if (loginCookie) {
-    // If the login cookie exists, create a user session and redirect to admin
-    return createUserSession(JSON.stringify(loginCookie), '/admin');
-  }
+  // Check if user is already logged in and redirect if they are
+  await checkAuthenticatedRedirect(request);
 
   const apiUrl = process.env.API_URL;
   if (!apiUrl) {
@@ -55,13 +44,32 @@ export const action: ActionFunction = async ({ request }) => {
     const data = await response.json();
 
     if (response.ok) {
-      const userWithAuth = { 
-        ...data.user, 
+      // Store the complete user data including token and preferences
+      const hideBalances = data.user.preferences?.hideBalances ?? true; // Default to true if not set
+      
+      // Update the backend with the initial preference if not set
+      if (data.user.preferences?.hideBalances === undefined) {
+        await fetch(`${apiUrl}/profile/${data.user.email}/preferences`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${data.token}`
+          },
+          body: JSON.stringify({ hideBalances })
+        });
+      }
+      
+      const userSession = {
+        ...data.user,
         isAuthorized: true,
-        token: data.token 
+        token: data.token,
+        preferences: {
+          ...data.user.preferences,
+          hideBalances
+        }
       };
-      // Create user session with token and user data
-      return createUserSession(JSON.stringify(userWithAuth), '/admin');
+      // Create user session with the complete user data
+      return createUserSession(JSON.stringify(userSession), '/admin');
     } else {
       return json({ error: data.message || 'An error occurred during sign in' }, { status: response.status });
     }
@@ -126,7 +134,7 @@ export default function SignIn() {
             id="email"
             name="email"
             type="email"
-            placeholder="mail@example.com"
+            placeholder="your@email.com"
             style={{
               width: '100%',
               padding: '0.75rem',

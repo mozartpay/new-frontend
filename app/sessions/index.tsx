@@ -1,6 +1,6 @@
 import { createCookieSessionStorage, redirect } from "@remix-run/node";
 
-const sessionSecret = process.env.SESSION_SECRET;
+const sessionSecret = typeof process !== "undefined" ? process.env.SESSION_SECRET : undefined;
 if (!sessionSecret) {
   throw new Error("SESSION_SECRET must be set");
 }
@@ -8,7 +8,7 @@ if (!sessionSecret) {
 const storage = createCookieSessionStorage({
   cookie: {
     name: "RJ_session",
-    secure: process.env.NODE_ENV === "production",
+    secure: typeof window !== "undefined" ? window.ENV?.NODE_ENV === "production" : true,
     secrets: [sessionSecret],
     sameSite: "lax",
     path: "/",
@@ -34,16 +34,24 @@ export async function getUserFromSession(request: Request) {
   return JSON.parse(userData);
 }
 
-export async function requireUserSession(
-  request: Request,
-  redirectTo: string = new URL(request.url).pathname
-) {
+export async function requireUserSession(request: Request) {
   const user = await getUserFromSession(request);
-  if (!user || !user.isAuthorized) {
-    const searchParams = new URLSearchParams([["redirectTo", redirectTo]]);
-    throw redirect(`/signin?${searchParams}`);
+  
+  if (!user) {
+    throw redirect("/signin");
   }
+  
   return user;
+}
+
+export async function checkAuthenticatedRedirect(request: Request) {
+  const user = await getUserFromSession(request);
+  
+  if (user) {
+    throw redirect("/admin");
+  }
+  
+  return null;
 }
 
 export async function getSession(request: Request) {
@@ -63,6 +71,31 @@ export async function destroyUserSession(request: Request) {
       "Set-Cookie": await storage.destroySession(session),
     },
   });
+}
+
+export async function updateUserPreferences(request: Request, preferences: any) {
+  const session = await getSession(request);
+  const userData = session.get("userData");
+  
+  if (!userData) return null;
+  
+  const user = JSON.parse(userData);
+  const updatedUser = {
+    ...user,
+    preferences: {
+      ...user.preferences,
+      ...preferences
+    }
+  };
+  
+  session.set("userData", JSON.stringify(updatedUser));
+  
+  return {
+    user: updatedUser,
+    headers: {
+      "Set-Cookie": await storage.commitSession(session),
+    },
+  };
 }
 
 export { storage };

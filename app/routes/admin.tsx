@@ -53,6 +53,14 @@ export default function Admin() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(data.error);
 
+  const initialUser = {
+    ...data.user,
+    preferences: {
+      hideBalances: false,
+      preferredCurrency: '',
+    },
+  };
+
   useEffect(() => {
     if (data.user && (!user || !user.isAuthorized)) {
       setUser({ ...data.user, isAuthorized: true });
@@ -85,7 +93,7 @@ export default function Admin() {
   };
 
   return (
-    <UserProvider initialUser={data.user}>
+    <UserProvider initialUser={initialUser}>
       <div className="dashboard">
         <aside className="sidebar">
           <h1>Mozart</h1>
@@ -100,6 +108,7 @@ export default function Admin() {
               <li><Link to="/admin/identity">Identity Verification</Link></li>
               <li><Link to="/admin/manage">Manage Requests</Link></li>
               <li><Link to="/admin/oas">OAs</Link></li>
+              <li><Link to="/admin/swap">Swap</Link></li>
             </ul>
           </nav>
         </aside>

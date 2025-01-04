@@ -29,33 +29,10 @@ interface StellarAccount {
   preferredNetwork: 'TESTNET' | 'PUBLIC';
 }
 
-const NETWORK_ASSETS = {
-  TESTNET: {
-    USD: {
-      code: 'USDC',
-      issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
-    },
-    EUR: {
-      code: 'EURC',
-      issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
-    },
-  },
-  PUBLIC: {
-    USD: {
-      code: 'USDC',
-      issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
-    },
-    EUR: {
-      code: 'EURC',
-      issuer: 'GAUYJFQCYCC6BGHFHF7SJ2UQFKM2UFHTWNEURF5SZCEV2ZFSCJ37CI4J',
-    },
-  },
-};
-
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
 
-  if (!user || !user.email || !user.isAuthorized) {
+  if (!user || !user.email || !user.isPhoneVerified) {
     return redirect("/signin");
   }
 
@@ -88,8 +65,9 @@ export default function AdminAdd() {
     token: string;
     stellarAccount: StellarAccount | null;
   }>();
+  
   const [currency, setCurrency] = useState<string>('');
-  const [stellarAccount, setStellarAccount] = useState<StellarAccount | null>(initialStellarAccount);
+  const [stellarAccount, setStellarAccount] = useState<StellarAccount | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -97,29 +75,57 @@ export default function AdminAdd() {
   const { user, setUser } = useUser();
 
   useEffect(() => {
+    setStellarAccount(initialStellarAccount);
+  }, [initialStellarAccount]);
+
+  useEffect(() => {
     if (!loaderUser) {
       navigate('/signin');
-    } else if (!user) {
-      setUser(loaderUser);
+      return;
+    }
+    
+    if (!user) {
+      setUser({
+        ...loaderUser,
+        isPhoneVerified: false,
+        preferredCurrency: '',
+        hideBalances: false,
+        preferences: {
+          hideBalances: false,
+          preferredCurrency: '',
+        },
+      });
     }
   }, [loaderUser, user, setUser, navigate]);
 
   useEffect(() => {
-    if (user && !stellarAccount) {
-      const storedStellarAccount = localStorage.getItem('stellarAccount');
-      if (storedStellarAccount) {
-        setStellarAccount(JSON.parse(storedStellarAccount));
-      } else {
-        fetchStellarAccount();
+    if (!user?.email || stellarAccount) {
+      return;
+    }
+
+    const storedStellarAccount = localStorage.getItem('stellarAccount');
+    if (storedStellarAccount) {
+      try {
+        const parsed = JSON.parse(storedStellarAccount);
+        if (parsed.preferredNetwork === user.preferredNetwork) {
+          setStellarAccount(parsed);
+          return;
+        }
+      } catch (e) {
+        localStorage.removeItem('stellarAccount');
       }
     }
+
+    fetchStellarAccount();
   }, [user, stellarAccount]);
 
   const fetchStellarAccount = async () => {
-    if (!user || !user.email) return;
+    if (!user?.email) return;
 
     try {
       setLoading(true);
+      setError(null);
+      
       const response = await axios.get(
         `${apiUrl}/balance?email=${encodeURIComponent(user.email)}&network=${user.preferredNetwork}`,
         { 
@@ -130,28 +136,37 @@ export default function AdminAdd() {
         }
       );
 
+      if (!response.data) {
+        throw new Error('No data received from server');
+      }
+
       const { balances, publicKey } = response.data;
 
-      if (balances && publicKey) {
-        const updatedAccount: StellarAccount = {
-          publicKey,
-          balance: balances.find((b: any) => b.asset_code === 'XLM')?.balance || '0',
-          hasUSDCTrustline: balances.some((b: any) => b.asset_code === 'USDC'),
-          hasEURCTrustline: balances.some((b: any) => b.asset_code === 'EURC'),
-          preferredNetwork: user.preferredNetwork
-        };
+      const xlmBalance = balances?.find((b: any) => b.asset_type === 'native' || b.asset_code === 'XLM');
+      
+      const updatedAccount: StellarAccount = {
+        publicKey,
+        balance: xlmBalance?.balance || '0',
+        hasUSDCTrustline: balances?.some((b: any) => b.asset_code === 'USDC') || false,
+        hasEURCTrustline: balances?.some((b: any) => b.asset_code === 'EURC') || false,
+        preferredNetwork: user.preferredNetwork
+      };
 
-        setStellarAccount(updatedAccount);
-        localStorage.setItem('stellarAccount', JSON.stringify(updatedAccount));
-      } else {
-        setStellarAccount(null);
-        localStorage.removeItem('stellarAccount');
-      }
+      setStellarAccount(updatedAccount);
+      localStorage.setItem('stellarAccount', JSON.stringify(updatedAccount));
+      
     } catch (error) {
       console.error('Error fetching Stellar account and balance:', error);
-      setError('Failed to fetch balance and public key. Please try again later.');
-      setStellarAccount(null);
-      localStorage.removeItem('stellarAccount');
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 400) {
+          setStellarAccount(null);
+          localStorage.removeItem('stellarAccount');
+          return;
+        }
+        setError(error.response?.data?.message || 'Failed to fetch account data');
+      } else {
+        setError('An unexpected error occurred');
+      }
     } finally {
       setLoading(false);
     }
@@ -168,6 +183,11 @@ export default function AdminAdd() {
       return;
     }
 
+    if (currency === 'XLM' && stellarAccount?.publicKey) {
+      setError('You already have a Stellar account.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -175,10 +195,10 @@ export default function AdminAdd() {
       switch (currency) {
         case 'USD':
         case 'EUR':
-          response = await createTrustline(user.email, currency, token, apiUrl, user.preferredNetwork);
+          response = await createTrustline(user.email, currency, token, apiUrl);
           break;
         case 'XLM':
-          response = await createXLMAccount(user.email, token, apiUrl, user.preferredNetwork);
+          response = await createXLMAccount(user.email, token, apiUrl);
           break;
         default:
           throw new Error(`Currency ${currency} not supported yet.`);
