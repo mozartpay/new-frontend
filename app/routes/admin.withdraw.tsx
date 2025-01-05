@@ -44,6 +44,7 @@ export default function AdminWithdraw() {
   const [xlmAddress, setXlmAddress] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<JSX.Element | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const navigate = useNavigate();
@@ -110,30 +111,57 @@ export default function AdminWithdraw() {
 
   const submitWithdrawRequest = async () => {
     setLoading(true);
+    setError(null);
+    setSuccess(null);
     try {
       if (!user) {
         throw new Error('User is not available');
       }
-      await axios.post(
-        'https://mozart-api-21ea5fd801a8.herokuapp.com/api/withdraw',
+      const network = user.preferredNetwork || 'testnet';
+      const response = await axios.post(
+        `${apiUrl}/withdraw`,
         {
           amount: amount,
           currency: currency,
           xlmAddress: xlmAddress,
           email: user.email,
+          network: network
         },
         {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
         }
       );
+
+      if (response.data?.result?.hash) {
+        const explorerUrl = `https://stellar.expert/explorer/${network}/tx/${response.data.result.hash}`;
+        setSuccess(
+          <div className="success-message" style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#e6ffe6', borderRadius: '4px' }}>
+            <p style={{ margin: '0 0 0.5rem 0' }}>Withdrawal successful! 🎉</p>
+            <p style={{ margin: '0' }}>
+              View on Stellar Expert:{' '}
+              <a 
+                href={explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#0066cc', textDecoration: 'underline' }}
+              >
+                {response.data.result.hash}
+              </a>
+            </p>
+          </div>
+        );
+      }
+
       setIsModalOpen(false);
       setIsConfirmationOpen(true);
-    } catch (error) {
+      fetchBalances();
+    } catch (error: any) {
       console.error('Error creating withdrawal request:', error);
-      setError('An error occurred while processing your withdrawal. Please try again.');
+      setError(error.response?.data?.message || 'An error occurred while processing your withdrawal. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -174,6 +202,7 @@ export default function AdminWithdraw() {
       />
 
       {error && <p className="error">{error}</p>}
+      {success && success}
 
       <div className="payment-methods">
         {currency === 'XLM' && (

@@ -60,6 +60,7 @@ export default function AdminAdd() {
   const [stellarAccount, setStellarAccount] = useState<StellarAccount | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<JSX.Element | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const navigate = useNavigate();
   const { user, setUser } = useUser();
@@ -173,17 +174,6 @@ export default function AdminAdd() {
   };
 
   const handleAddPayment = async () => {
-    if (!user || !user.email) {
-      setError('User information is missing. Please sign in again.');
-      return;
-    }
-
-    if (currency === 'XLM' && stellarAccount?.publicKey) {
-      setError('You already have a Stellar account.');
-      return;
-    }
-
-    setLoading(true);
     setError(null);
     try {
       let response;
@@ -192,20 +182,40 @@ export default function AdminAdd() {
       
       switch (currency) {
         case 'USD':
+          response = await createTrustline(user.email, 'USDC', token, apiUrl);
+          break;
         case 'EUR':
-          response = await createTrustline(user.email, currency, token, apiUrl);
+          response = await createTrustline(user.email, 'EURC', token, apiUrl);
           break;
         case 'XLM':
           response = await createXLMAccount(user.email, token, apiUrl);
           break;
         default:
-          throw new Error(`Currency ${currency} not supported yet.`);
+          throw new Error('Invalid currency');
       }
 
-      const { publicKey, hasUSDCTrustline, hasEURCTrustline } = response;
-      const updatedAccount: StellarAccount = {
-        ...stellarAccount!,
-        publicKey,
+      if (response.data?.result?.hash) {
+        const explorerUrl = `https://stellar.expert/explorer/${network}/tx/${response.data.result.hash}`;
+        setSuccess(
+          <div className="success-message" style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#e6ffe6', borderRadius: '4px' }}>
+            <p style={{ margin: '0 0 0.5rem 0' }}>Transaction successful! 🎉</p>
+            <p style={{ margin: '0' }}>
+              View on Stellar Expert:{' '}
+              <a 
+                href={explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#0066cc', textDecoration: 'underline' }}
+              >
+                {response.data.result.hash}
+              </a>
+            </p>
+          </div>
+        );
+      }
+
+      const updatedAccount = {
+        publicKey: response.data.publicKey,
         hasUSDCTrustline: currency === 'USD' ? true : stellarAccount?.hasUSDCTrustline || false,
         hasEURCTrustline: currency === 'EUR' ? true : stellarAccount?.hasEURCTrustline || false,
         balance: stellarAccount?.balance || '0',
@@ -271,6 +281,7 @@ export default function AdminAdd() {
         </select>
 
         {error && <p className="error">{error}</p>}
+        {success && success}
 
         <div className="payment-methods">
           {currency === 'USD' && stellarAccount?.hasUSDCTrustline ? (
