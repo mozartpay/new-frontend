@@ -15,7 +15,7 @@ export const loader = async ({ request }: { request: Request }) => {
   
     return json({ 
       email: user.email,
-      apiUrl: process.env.LOCAL_API_URL
+      apiUrl: process.env.API_URL
     });
 };
 

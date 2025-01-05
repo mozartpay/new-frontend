@@ -6,6 +6,6 @@ export type User = {
   isAuthorized: boolean;
   image?: string;
   preferredNetwork?: string;
+  token?: string;
   // Add other user properties as needed
 };
-

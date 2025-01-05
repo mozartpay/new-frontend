@@ -6,6 +6,7 @@ import { getUserFromSession } from '~/sessions/index';
 import { useUser } from '~/context/UserContext';
 import axios from 'axios';
 import "~/styles/admin.css";
+import { User } from '~/types/user';
 
 // Import your images
 import USDC from '~/assets/img/dashboards/USDC.png';
@@ -14,19 +15,12 @@ import EURC from '~/assets/img/dashboards/EURC.png';
 
 import { getStellarAccount, createTrustline, createXLMAccount } from '~/utils/api';
 
-interface User {
-  email: string;
-  isAuthorized: boolean;
-  token: string;
-  preferredNetwork: 'TESTNET' | 'PUBLIC';
-}
-
 interface StellarAccount {
   publicKey: string;
   balance: string;
   hasUSDCTrustline: boolean;
   hasEURCTrustline: boolean;
-  preferredNetwork: 'TESTNET' | 'PUBLIC';
+  preferredNetwork: 'testnet' | 'mainnet';
 }
 
 export const loader: LoaderFunction = async ({ request }) => {
@@ -34,10 +28,6 @@ export const loader: LoaderFunction = async ({ request }) => {
 
   if (!user || !user.email || !user.isPhoneVerified) {
     return redirect("/signin");
-  }
-
-  if (!user.preferredNetwork) {
-    return redirect("/admin/profile");
   }
 
   const apiUrl = process.env.API_URL;
@@ -48,13 +38,13 @@ export const loader: LoaderFunction = async ({ request }) => {
 
   try {
     const stellarAccount = await getStellarAccount(user.email, user.token, apiUrl);
-    return json({ user, apiUrl, token: user.token, stellarAccount });
+    return json({ user, apiUrl, token: user.token ?? '', stellarAccount });
   } catch (error) {
     console.error("Error processing user data:", error);
     if (error instanceof Error) {
-      return json({ user, apiUrl, token: user.token, stellarAccount: null, error: error.message });
+      return json({ user, apiUrl, token: user.token ?? '', stellarAccount: null, error: error.message });
     }
-    return json({ user, apiUrl, token: user.token, stellarAccount: null, error: "An unexpected error occurred" });
+    return json({ user, apiUrl, token: user.token ?? '', stellarAccount: null, error: "An unexpected error occurred" });
   }
 };
 
@@ -87,12 +77,12 @@ export default function AdminAdd() {
     if (!user) {
       setUser({
         ...loaderUser,
+        token: loaderUser.token || '',
         isPhoneVerified: false,
-        preferredCurrency: '',
-        hideBalances: false,
         preferences: {
           hideBalances: false,
-          preferredCurrency: '',
+          currency: '',
+          network: ''
         },
       });
     }
@@ -126,8 +116,11 @@ export default function AdminAdd() {
       setLoading(true);
       setError(null);
       
+      // Default to testnet if no preferred network is set
+      const network = user.preferredNetwork || 'testnet';
+      
       const response = await axios.get(
-        `${apiUrl}/balance?email=${encodeURIComponent(user.email)}&network=${user.preferredNetwork}`,
+        `${apiUrl}/balance?email=${encodeURIComponent(user.email)}&network=${network}`,
         { 
           headers: { 
             'Content-Type': 'application/json',
@@ -149,7 +142,9 @@ export default function AdminAdd() {
         balance: xlmBalance?.balance || '0',
         hasUSDCTrustline: balances?.some((b: any) => b.asset_code === 'USDC') || false,
         hasEURCTrustline: balances?.some((b: any) => b.asset_code === 'EURC') || false,
-        preferredNetwork: user.preferredNetwork
+        preferredNetwork: user.preferredNetwork === "testnet" || user.preferredNetwork === "mainnet"
+          ? user.preferredNetwork
+          : "testnet"
       };
 
       setStellarAccount(updatedAccount);
@@ -192,6 +187,9 @@ export default function AdminAdd() {
     setError(null);
     try {
       let response;
+      // Default to testnet if no preferred network is set
+      const network = user.preferredNetwork || 'testnet';
+      
       switch (currency) {
         case 'USD':
         case 'EUR':
@@ -210,7 +208,10 @@ export default function AdminAdd() {
         publicKey,
         hasUSDCTrustline: currency === 'USD' ? true : stellarAccount?.hasUSDCTrustline || false,
         hasEURCTrustline: currency === 'EUR' ? true : stellarAccount?.hasEURCTrustline || false,
-        balance: stellarAccount?.balance || '0'
+        balance: stellarAccount?.balance || '0',
+        preferredNetwork: user.preferredNetwork === "testnet" || user.preferredNetwork === "mainnet"
+          ? user.preferredNetwork
+          : "testnet"
       };
       setStellarAccount(updatedAccount);
       setIsModalOpen(true);
@@ -261,94 +262,87 @@ export default function AdminAdd() {
   return (
     <div className="admin-add">
       <h1>Add Payment Method</h1>
-      {user.preferredNetwork ? (
-        <>
-          <select value={currency} onChange={handleCurrencyChange}>
-            <option value="">Select currency</option>
-            <option value="USD">USD</option>
-            <option value="XLM">XLM</option>
-            <option value="EUR">EUR</option>
-          </select>
+      <>
+        <select value={currency} onChange={handleCurrencyChange}>
+          <option value="">Select currency</option>
+          <option value="USD">USD</option>
+          <option value="XLM">XLM</option>
+          <option value="EUR">EUR</option>
+        </select>
 
-          {error && <p className="error">{error}</p>}
+        {error && <p className="error">{error}</p>}
 
-          <div className="payment-methods">
-            {currency === 'USD' && stellarAccount?.hasUSDCTrustline ? (
-              <PaymentMethodCard
-                imgSrc={USDC}
-                title="USDC"
-                description="You already have a USDC trustline."
-                displayInfo={
-                  <div>
-                    <p>Public Key: {maskedPublicKey}</p>
-                    <button onClick={() => handleCopy(stellarAccount.publicKey)}>Copy</button>
-                  </div>
-                }
-                network={user.preferredNetwork}
-              />
-            ) : currency === 'USD' ? (
-              <PaymentMethodCard
-                imgSrc={USDC}
-                title="USDC"
-                description={`USDC is a digital dollar always redeemable 1:1 (${user.preferredNetwork})`}
-                onClick={handleAddPayment}
-                network={user.preferredNetwork}
-              />
-            ) : null}
+        <div className="payment-methods">
+          {currency === 'USD' && stellarAccount?.hasUSDCTrustline ? (
+            <PaymentMethodCard
+              imgSrc={USDC}
+              title="USDC"
+              description="You already have a USDC trustline."
+              displayInfo={
+                <div>
+                  <p>Public Key: {maskedPublicKey}</p>
+                  <button onClick={() => handleCopy(stellarAccount.publicKey)}>Copy</button>
+                </div>
+              }
+              network={user.preferredNetwork || 'testnet'}
+            />
+          ) : currency === 'USD' ? (
+            <PaymentMethodCard
+              imgSrc={USDC}
+              title="USDC"
+              description={`USDC is a digital dollar always redeemable 1:1 (${user.preferredNetwork || 'testnet'})`}
+              onClick={handleAddPayment}
+              network={user.preferredNetwork || 'testnet'}
+            />
+          ) : null}
 
-            {currency === 'EUR' && stellarAccount?.hasEURCTrustline ? (
-              <PaymentMethodCard
-                imgSrc={EURC}
-                title="EURC"
-                description="You already have a EURC trustline."
-                displayInfo={
-                  <div>
-                    <p>Public Key: {maskedPublicKey}</p>
-                    <button onClick={() => handleCopy(stellarAccount.publicKey)}>Copy</button>
-                  </div>
-                }
-                network={user.preferredNetwork}
-              />
-            ) : currency === 'EUR' ? (
-              <PaymentMethodCard
-                imgSrc={EURC}
-                title="EURC"
-                description={`EURC is a digital euro always redeemable 1:1 (${user.preferredNetwork})`}
-                onClick={handleAddPayment}
-                network={user.preferredNetwork}
-              />
-            ) : null}
+          {currency === 'EUR' && stellarAccount?.hasEURCTrustline ? (
+            <PaymentMethodCard
+              imgSrc={EURC}
+              title="EURC"
+              description="You already have a EURC trustline."
+              displayInfo={
+                <div>
+                  <p>Public Key: {maskedPublicKey}</p>
+                  <button onClick={() => handleCopy(stellarAccount.publicKey)}>Copy</button>
+                </div>
+              }
+              network={user.preferredNetwork || 'testnet'}
+            />
+          ) : currency === 'EUR' ? (
+            <PaymentMethodCard
+              imgSrc={EURC}
+              title="EURC"
+              description={`EURC is a digital euro always redeemable 1:1 (${user.preferredNetwork || 'testnet'})`}
+              onClick={handleAddPayment}
+              network={user.preferredNetwork || 'testnet'}
+            />
+          ) : null}
 
-            {currency === 'XLM' && stellarAccount && stellarAccount.publicKey ? (
-              <PaymentMethodCard
-                imgSrc={XLM}
-                title="XLM"
-                description="Your Stellar account is already created."
-                displayInfo={
-                  <div>
-                    <p>Public Key: {maskedPublicKey}</p>
-                    <button onClick={() => handleCopy(stellarAccount.publicKey)}>Copy</button>
-                  </div>
-                }
-                network={user.preferredNetwork}
-              />
-            ) : currency === 'XLM' ? (
-              <PaymentMethodCard
-                imgSrc={XLM}
-                title="XLM"
-                description={`Create a Stellar account to start using XLM (${user.preferredNetwork})`}
-                onClick={handleAddPayment}
-                network={user.preferredNetwork}
-              />
-            ) : null}
-          </div>
-        </>
-      ) : (
-        <div className="no-network-message">
-          <p>Please select your preferred network in settings before adding payment methods.</p>
-          <button onClick={() => navigate('/admin/profile')}>Go to Settings</button>
+          {currency === 'XLM' && stellarAccount && stellarAccount.publicKey ? (
+            <PaymentMethodCard
+              imgSrc={XLM}
+              title="XLM"
+              description="Your Stellar account is already created."
+              displayInfo={
+                <div>
+                  <p>Public Key: {maskedPublicKey}</p>
+                  <button onClick={() => handleCopy(stellarAccount.publicKey)}>Copy</button>
+                </div>
+              }
+              network={user.preferredNetwork || 'testnet'}
+            />
+          ) : currency === 'XLM' ? (
+            <PaymentMethodCard
+              imgSrc={XLM}
+              title="XLM"
+              description={`Create a Stellar account to start using XLM (${user.preferredNetwork || 'testnet'})`}
+              onClick={handleAddPayment}
+              network={user.preferredNetwork || 'testnet'}
+            />
+          ) : null}
         </div>
-      )}
+      </>
 
       {isModalOpen && (
         <div className="modal">

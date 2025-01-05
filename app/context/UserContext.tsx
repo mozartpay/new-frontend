@@ -11,6 +11,7 @@ interface User {
     currency: string;
     network: string;
   };
+  preferredNetwork?: string;
   // Add other relevant properties
 }
 
