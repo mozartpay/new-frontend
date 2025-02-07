@@ -117,8 +117,8 @@ export default function AdminAdd() {
       setLoading(true);
       setError(null);
       
-      // Default to testnet if no preferred network is set
-      const network = user.preferredNetwork || 'testnet';
+      // Default to testnet if no user or no preferred network is set
+      const network = user?.preferredNetwork || 'testnet';
       
       const response = await axios.get(
         `${apiUrl}/balance?email=${encodeURIComponent(user.email)}&network=${network}`,
@@ -143,8 +143,8 @@ export default function AdminAdd() {
         balance: xlmBalance?.balance || '0',
         hasUSDCTrustline: balances?.some((b: any) => b.asset_code === 'USDC') || false,
         hasEURCTrustline: balances?.some((b: any) => b.asset_code === 'EURC') || false,
-        preferredNetwork: user.preferredNetwork === "testnet" || user.preferredNetwork === "mainnet"
-          ? user.preferredNetwork
+        preferredNetwork: user?.preferredNetwork === "testnet" || user?.preferredNetwork === "mainnet"
+          ? user?.preferredNetwork
           : "testnet"
       };
 
@@ -177,18 +177,18 @@ export default function AdminAdd() {
     setError(null);
     try {
       let response;
-      // Default to testnet if no preferred network is set
-      const network = user.preferredNetwork || 'testnet';
+      // Default to testnet if no user or no preferred network is set
+      const network = user?.preferredNetwork || 'testnet';
       
       switch (currency) {
         case 'USD':
-          response = await createTrustline(user.email, 'USDC', token, apiUrl);
+          response = await createTrustline(user?.email || '', 'USDC', token, apiUrl);
           break;
         case 'EUR':
-          response = await createTrustline(user.email, 'EURC', token, apiUrl);
+          response = await createTrustline(user?.email || '', 'EURC', token, apiUrl);
           break;
         case 'XLM':
-          response = await createXLMAccount(user.email, token, apiUrl);
+          response = await createXLMAccount(user?.email || '', token, apiUrl);
           break;
         default:
           throw new Error('Invalid currency');
@@ -214,14 +214,12 @@ export default function AdminAdd() {
         );
       }
 
-      const updatedAccount = {
+      const updatedAccount: StellarAccount = {
         publicKey: response.data.publicKey,
         hasUSDCTrustline: currency === 'USD' ? true : stellarAccount?.hasUSDCTrustline || false,
         hasEURCTrustline: currency === 'EUR' ? true : stellarAccount?.hasEURCTrustline || false,
         balance: stellarAccount?.balance || '0',
-        preferredNetwork: user.preferredNetwork === "testnet" || user.preferredNetwork === "mainnet"
-          ? user.preferredNetwork
-          : "testnet"
+        preferredNetwork: user?.preferredNetwork === "mainnet" ? "mainnet" : "testnet" as const
       };
       setStellarAccount(updatedAccount);
       setIsModalOpen(true);
@@ -295,15 +293,15 @@ export default function AdminAdd() {
                   <button onClick={() => handleCopy(stellarAccount.publicKey)}>Copy</button>
                 </div>
               }
-              network={user.preferredNetwork || 'testnet'}
+              network={user?.preferredNetwork || 'testnet'}
             />
           ) : currency === 'USD' ? (
             <PaymentMethodCard
               imgSrc={USDC}
               title="USDC"
-              description={`USDC is a digital dollar always redeemable 1:1 (${user.preferredNetwork || 'testnet'})`}
+              description={`USDC is a digital dollar always redeemable 1:1 (${user?.preferredNetwork || 'testnet'})`}
               onClick={handleAddPayment}
-              network={user.preferredNetwork || 'testnet'}
+              network={user?.preferredNetwork || 'testnet'}
             />
           ) : null}
 
@@ -318,15 +316,15 @@ export default function AdminAdd() {
                   <button onClick={() => handleCopy(stellarAccount.publicKey)}>Copy</button>
                 </div>
               }
-              network={user.preferredNetwork || 'testnet'}
+              network={user?.preferredNetwork || 'testnet'}
             />
           ) : currency === 'EUR' ? (
             <PaymentMethodCard
               imgSrc={EURC}
               title="EURC"
-              description={`EURC is a digital euro always redeemable 1:1 (${user.preferredNetwork || 'testnet'})`}
+              description={`EURC is a digital euro always redeemable 1:1 (${user?.preferredNetwork || 'testnet'})`}
               onClick={handleAddPayment}
-              network={user.preferredNetwork || 'testnet'}
+              network={user?.preferredNetwork || 'testnet'}
             />
           ) : null}
 
@@ -341,15 +339,15 @@ export default function AdminAdd() {
                   <button onClick={() => handleCopy(stellarAccount.publicKey)}>Copy</button>
                 </div>
               }
-              network={user.preferredNetwork || 'testnet'}
+              network={user?.preferredNetwork || 'testnet'}
             />
           ) : currency === 'XLM' ? (
             <PaymentMethodCard
               imgSrc={XLM}
               title="XLM"
-              description={`Create a Stellar account to start using XLM (${user.preferredNetwork || 'testnet'})`}
+              description={`Create a Stellar account to start using XLM (${user?.preferredNetwork || 'testnet'})`}
               onClick={handleAddPayment}
-              network={user.preferredNetwork || 'testnet'}
+              network={user?.preferredNetwork || 'testnet'}
             />
           ) : null}
         </div>

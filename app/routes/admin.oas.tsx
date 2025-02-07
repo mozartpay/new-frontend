@@ -15,7 +15,7 @@ export const loader = async ({ request }: { request: Request }) => {
   
     return json({ 
       email: user.email,
-      apiUrl: process.env.API_URL
+      apiUrl: import.meta.env.VITE_API_URL
     });
 };
 
@@ -39,10 +39,16 @@ export default function OAs() {
     const initializeDefindex = async () => {
       console.debug('[OAS] Starting Defindex initialization');
       try {
-        const contractId = 'GBZX4Y3JAZ4MPNYABG3TE47Q4S73UHGNZXWC6OTC5NKYQSWORMRQ7SVW';
+        const contractId = 'CBNYLJQGBNIENVF54Q73W44TLUXAYX6D4XZH7OLHQIAXYJEMSOU6TWEL';
         console.debug('[OAS] Initializing vault with contract ID:', contractId);
         
-        const newVault = await initializeVault(contractId);
+        // Initialize vault with passphrase configuration
+        const vaultConfig = {
+          network: 'TESTNET',
+          contractId,
+          passphrase: import.meta.env.VITE_DEFINDEX_PASSPHRASE || 'default_passphrase'
+        };
+        const newVault = await initializeVault(contractId, vaultConfig);
         console.debug('[OAS] Vault initialization result:', { success: !!newVault });
         
         if (newVault) {

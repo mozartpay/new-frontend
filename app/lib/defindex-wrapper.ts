@@ -25,7 +25,7 @@ export const initializeSDK = async () => {
   }
 };
 
-export const initializeVault = async (contractId: string) => {
+export const initializeVault = async (contractId: string, config?: any) => {
   console.debug('[DefindexSDK] Starting vault initialization with contract ID:', contractId);
   if (typeof window === 'undefined') {
     console.warn('[DefindexSDK] Window object not found - running in non-browser environment');
@@ -44,11 +44,13 @@ export const initializeVault = async (contractId: string) => {
   try {
     const vault = new Vault({
       network: SorobanNetwork.TESTNET,
-      contractId
+      contractId,
+      passphrase: config?.passphrase
     });
     console.debug('[DefindexSDK] Successfully created vault instance', { 
       network: SorobanNetwork.TESTNET,
-      contractId 
+      contractId,
+      hasPassphrase: !!config?.passphrase
     });
     return vault;
   } catch (error) {

@@ -92,9 +92,9 @@ export default function AdminIndex() {
   }, [user, navigate]);
 
   // Filter balances based on user's preferred currency
-  const filteredBalances = user?.preferences?.currency
+  const filteredBalances = user?.preferences?.currency && Array.isArray(balances)
     ? balances.filter(balance => balance.asset_code === user.preferences.currency)
-    : balances;
+    : balances || [];
 
   // Toggle balance visibility and update the server
   const toggleBalanceVisibility = async (newState: boolean) => {

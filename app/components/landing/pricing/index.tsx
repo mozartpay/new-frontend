@@ -10,8 +10,9 @@ interface Props {
 
 interface PlanDetails {
   type: string;
-  amount: number;
+  amount: number | undefined;
   currency: string;
+  displayPrice?: string;
 }
 
 function PriceWrapper(props: Props) {
@@ -69,9 +70,10 @@ export default function Pricing() {
         <PriceWrapper>
           <Plan
             type="Enterprise"
-            amount={100}
-            currency="$"
-            features={['Up to 10 users included', 'API Access', 'Unlimited requests per month', '24/7 Phone & Email support']}
+            amount={undefined}
+            currency=""
+            displayPrice="Let's talk"
+            features={['From 5 users included', 'API Access', 'Unlimited requests per month', '24/7 Phone & Email support']}
             onTrialClick={handleStartTrial}
           />
         </PriceWrapper>
@@ -84,6 +86,7 @@ function Plan({
   type,
   amount,
   currency,
+  displayPrice,
   features,
   onTrialClick,
 }: PlanDetails & { features: string[]; onTrialClick: (type: string, amount: number, currency: string) => void }) {
@@ -92,9 +95,15 @@ function Plan({
       <div className="plan-header">
         <h2 className="plan-type">{type}</h2>
         <div className="plan-price">
-          <span className="plan-currency">{currency}</span>
-          <span className="plan-amount">{amount}</span>
-          <span className="plan-duration">/month</span>
+          {displayPrice ? (
+            <span className="plan-amount">{displayPrice}</span>
+          ) : (
+            <>
+              <span className="plan-currency">{currency}</span>
+              <span className="plan-amount">{amount}</span>
+              <span className="plan-duration">/month</span>
+            </>
+          )}
         </div>
       </div>
       <div className="plan-body">

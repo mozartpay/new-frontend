@@ -7,5 +7,10 @@ export type User = {
   image?: string;
   preferredNetwork?: string;
   token?: string;
+  preferences?: {
+    hideBalances: boolean;
+    currency: string;
+    network: string;
+  };
   // Add other user properties as needed
 };

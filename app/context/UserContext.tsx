@@ -12,6 +12,7 @@ interface User {
     network: string;
   };
   preferredNetwork?: string;
+  publicKeyXlm: string;
   // Add other relevant properties
 }
 

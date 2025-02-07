@@ -8,7 +8,7 @@ export const loader: LoaderFunction = async ({ request }) => {
   // Check if user is already logged in and redirect if they are
   await checkAuthenticatedRedirect(request);
 
-  const apiUrl = process.env.API_URL;
+  const apiUrl = process.env.LOCAL_API_URL;
   if (!apiUrl) {
     console.error("API_URL is not defined");
     return json({ message: "API_URL is not configured properly", error: true }, { status: 500 });
@@ -21,15 +21,18 @@ export const action: ActionFunction = async ({ request }) => {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
 
-  const apiUrl = process.env.API_URL;
+  const apiUrl = process.env.LOCAL_API_URL;
   if (!apiUrl) {
-    return json({ error: "API_URL is not configured properly" }, { status: 500 });
+    console.error("LOCAL_API_URL environment variable is not configured");
+    return json({ error: "LOCAL_API_URL is not configured properly" }, { status: 500 });
   }
 
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
+    // First, authenticate the user
+    console.log('Attempting signin request to:', `${apiUrl}/signin`);
     const response = await fetch(`${apiUrl}/signin`, {
       method: 'POST',
       headers: {
@@ -42,34 +45,59 @@ export const action: ActionFunction = async ({ request }) => {
     clearTimeout(timeoutId);
 
     const data = await response.json();
+    console.log('Signin response data structure:', JSON.stringify(data, null, 2));
 
     if (response.ok) {
-      // Store the complete user data including token and preferences
-      const hideBalances = data.user.preferences?.hideBalances ?? true; // Default to true if not set
-      
-      // Update the backend with the initial preference if not set
-      if (data.user.preferences?.hideBalances === undefined) {
-        await fetch(`${apiUrl}/profile/${data.user.email}/preferences`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${data.token}`
-          },
-          body: JSON.stringify({ hideBalances })
-        });
-      }
-      
-      const userSession = {
-        ...data.user,
-        isAuthorized: true,
-        token: data.token,
-        preferences: {
-          ...data.user.preferences,
-          hideBalances
+      try {
+        // Validate the response structure
+        if (!data.user || !data.user._id) {
+          console.error('Invalid signin response structure:', data);
+          return json({ 
+            error: 'Invalid response from server: missing user ID' 
+          }, { status: 500 });
         }
-      };
-      // Create user session with the complete user data
-      return createUserSession(JSON.stringify(userSession), '/admin');
+
+        const hideBalances = data.user.preferences?.hideBalances ?? true;
+        
+        // Update the backend with the initial preference if not set
+        if (data.user.preferences?.hideBalances === undefined) {
+          const preferencesResponse = await fetch(`${apiUrl}/profile/${data.user.email}/preferences`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${data.token}`
+            },
+            body: JSON.stringify({ hideBalances })
+          });
+
+          if (!preferencesResponse.ok) {
+            console.error('Failed to update preferences:', await preferencesResponse.text());
+          }
+        }
+        
+        const userSession = {
+          ...data.user,
+          id: data.user._id,
+          isAuthorized: true,
+          token: data.token,
+          preferences: {
+            ...data.user.preferences,
+            hideBalances
+          }
+        };
+
+        console.log('Creating user session with data:', { 
+          userId: userSession.id,
+          hasPreferences: !!userSession.preferences
+        });
+
+        return createUserSession(JSON.stringify(userSession), '/admin');
+      } catch (error) {
+        console.error('Error processing user data:', error);
+        return json({ 
+          error: `Failed to process user data: ${error instanceof Error ? error.message : 'Unknown error'}` 
+        }, { status: 500 });
+      }
     } else {
       return json({ error: data.message || 'An error occurred during sign in' }, { status: response.status });
     }

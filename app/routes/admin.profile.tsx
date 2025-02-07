@@ -18,8 +18,8 @@ import type { User } from '~/types/user';
 const DEFAULT_CURRENCIES = ['XLM', 'USDC', 'EURC'];
 
 const NETWORK_OPTIONS = [
-  { value: 'https://horizon.stellar.org', label: 'Mainnet', description: 'Production network for real transactions' },
-  { value: 'https://horizon-testnet.stellar.org', label: 'Testnet', description: 'Test network for development and testing' }
+  { value: 'mainnet', label: 'Mainnet', description: 'Production network for real transactions', url: 'https://horizon.stellar.org' },
+  { value: 'testnet', label: 'Testnet', description: 'Test network for development and testing', url: 'https://horizon-testnet.stellar.org' }
 ];
 
 export const loader: LoaderFunction = async ({ request }) => {
@@ -34,7 +34,7 @@ export const loader: LoaderFunction = async ({ request }) => {
       return redirect("/signin");
     }
 
-    const apiUrl = process.env.API_URL;
+    const apiUrl = process.env.LOCAL_API_URL;
     if (!apiUrl) {
       throw new Error("API_URL is not configured");
     }
@@ -160,8 +160,9 @@ export default function AdminProfile() {
       if (!privateKey) {
         try {
           setLoadingPrivateKey(true);
+          console.log('Attempting to fetch private key for:', user.email);
           const response = await axios.post(
-            `${apiUrl}/api/xlm/decrypt`,
+            `${apiUrl}/xlm/decrypt`,
             {
               email: user.email,
             },
@@ -173,11 +174,19 @@ export default function AdminProfile() {
               },
             }
           );
+          
+          console.log('API Response:', response.data);
+          
+          if (!response.data.privateKey) {
+            throw new Error('No private key in response');
+          }
 
           setPrivateKey(response.data.privateKey);
         } catch (error) {
           console.error('Error decrypting private key:', error);
-          setError('Failed to decrypt private key');
+          setError(error instanceof Error ? 
+            `Failed to decrypt private key: ${error.message}` : 
+            'Failed to decrypt private key');
         } finally {
           setLoadingPrivateKey(false);
         }
@@ -248,21 +257,39 @@ export default function AdminProfile() {
   }, [confirmationMessage]);
 
   const handlePreferredNetworkChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const newPreferredNetwork = event.target.value;
+    const newNetwork = event.target.value;
     
     try {
       const response = await axios.post(`${apiUrl}/profile/preferredNetwork`, {
         email: user.email,
-        preferredNetwork: newPreferredNetwork
+        preferredNetwork: newNetwork
       });
-
-      if (response.data.message === 'Preferred network updated successfully') {
-        setUser(prevUser => ({ ...prevUser, preferredNetwork: newPreferredNetwork }));
-        setNetworkChangeMessage(`Network changed to ${NETWORK_OPTIONS.find(opt => opt.value === newPreferredNetwork)?.label}`);
+      
+      if (response.data?.status === 'success') {
+        const networkOption = NETWORK_OPTIONS.find(opt => opt.value === newNetwork);
+        updatePreferences({ network: networkOption?.url || 'testnet' });
+        setUser(prevUser => ({
+          ...prevUser,
+          preferences: {
+            ...prevUser.preferences,
+            network: networkOption?.url || 'testnet',
+            hideBalances: prevUser.preferences?.hideBalances ?? false,
+            currency: prevUser.preferences?.currency ?? 'USD'
+          },
+          preferredNetwork: networkOption?.url || 'testnet'
+        }));
+        setNetworkChangeMessage(`Network changed to ${networkOption?.label}`);
+        
+        fetcher.submit(
+          { network: networkOption?.url || 'testnet' } as ProfileFormData,
+          { method: "post" }
+        );
+      } else {
+        throw new Error(response.data?.message || 'Invalid response from server');
       }
     } catch (error) {
-      console.error('Error updating preferred network:', error);
-      setError('Failed to update preferred network. Please try again.');
+      console.error('Error updating network:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update network. Please try again.');
     }
   };
 
@@ -423,7 +450,9 @@ export default function AdminProfile() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
             <select
               name="preferredNetwork"
-              value={user.preferredNetwork || ''}
+              value={NETWORK_OPTIONS.find(opt => 
+                opt.url === (user?.preferences?.network || user?.preferredNetwork)
+              )?.value || ''}
               onChange={handlePreferredNetworkChange}
               style={{ 
                 padding: '10px',
@@ -439,7 +468,7 @@ export default function AdminProfile() {
               ))}
             </select>
             
-            {user.preferredNetwork && (
+            {(user?.preferences?.network || user?.preferredNetwork) && (
               <div style={{ 
                 fontSize: '0.9em', 
                 color: '#666',
@@ -447,7 +476,7 @@ export default function AdminProfile() {
                 backgroundColor: '#f5f5f5',
                 borderRadius: '4px'
               }}>
-                {NETWORK_OPTIONS.find(opt => opt.value === user.preferredNetwork)?.description}
+                {NETWORK_OPTIONS.find(opt => opt.value === (user?.preferences?.network || user?.preferredNetwork))?.description}
               </div>
             )}
 

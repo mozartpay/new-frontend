@@ -26,7 +26,8 @@ export const loader: LoaderFunction = async ({ request }) => {
     let error: string | null = null;
 
     try {
-      balances = await getBalances(user.email, user.token);
+      const response = await getBalances(user.email, user.token, undefined, user.preferredNetwork);
+      balances = response.balances;
     } catch (balanceError: any) {
       console.error("Error fetching balances:", balanceError.response?.data || balanceError.message);
       error = balanceError.response?.data?.error || "Failed to fetch balances";

@@ -1,82 +1,72 @@
 import axios from 'axios';
 
-export async function getBalances(email: string, token: string) {
-  if (!email || !token) {
-    throw new Error("Email and token are required");
-  }
+const DEFAULT_API_URL = 'http://localhost:8000/api';
 
+function getValidApiUrl(apiUrl?: string): string {
+  if (!apiUrl) {
+    console.warn('API URL not provided, using default:', DEFAULT_API_URL);
+    return DEFAULT_API_URL;
+  }
+  return apiUrl;
+}
+
+export async function getBalances(email: string, token: string, apiUrl?: string, network?: string) {
   try {
-    const response = await axios({
-      method: 'get',
-      url: `${process.env.API_URL}/balance?email=${encodeURIComponent(email)}`,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-    return response.data.balances || [];
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      console.error("Error fetching balances:", error.response?.data || error.message);
-      if (error.response?.status === 401) {
-        throw new Error("Unauthorized: Please check your authentication token");
-      } else if (error.response?.status === 400) {
-        throw new Error("Bad Request: Please check the provided email");
+    const baseUrl = getValidApiUrl(apiUrl);
+    const response = await axios.get(
+      `${baseUrl}/balance`,
+      {
+        params: { email, network },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
       }
-    }
+    );
+    
+    // Ensure we always return an array of balances
+    const balances = response.data?.balances || [];
+    return { balances };
+  } catch (error) {
+    console.error('Error fetching balances:', error);
     throw error;
   }
 }
 
-export async function getStellarAccount(email: string, token: string, apiUrl: string) {
+export async function getStellarAccount(email: string, token: string, apiUrl?: string) {
   try {
+    const baseUrl = getValidApiUrl(apiUrl);
     const response = await axios.get(
-      `${apiUrl}/balance?email=${encodeURIComponent(email)}`,
-      { 
-        headers: { 
+      `${baseUrl}/stellar/account`,
+      {
+        params: { email },
+        headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'Authorization': `Bearer ${token}`
-        } 
+        }
       }
     );
-
-    const { balance, publicKey } = response.data;
-
-    if (balance && publicKey) {
-      return {
-        publicKey,
-        balance,
-        hasUSDCTrustline: false,
-        hasEURCTrustline: false,
-      };
-    }
-    return null;
+    return response.data;
   } catch (error) {
-    if (axios.isAxiosError(error)) {
-      if (error.response?.status === 404) {
-        console.log('User not found or no Stellar account exists');
-        return null;
-      } else if (error.response?.status === 400 && error.response.data.error === 'Private key not available') {
-        console.log('Private key not available for this account');
-        return null;
-      }
-    }
     console.error('Error fetching Stellar account:', error);
     throw error;
   }
 }
 
-export async function createTrustline(email: string, currency: string, token: string, apiUrl: string) {
+export async function createTrustline(email: string, currency: string, token: string, apiUrl?: string) {
   try {
+    const baseUrl = getValidApiUrl(apiUrl);
     const response = await axios.post(
-      `${apiUrl}/trustline`,
+      `${baseUrl}/stellar/trustline`,
       { email, currency },
-      { 
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Accept': '*/*',
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
           'Authorization': `Bearer ${token}`
-        } 
+        }
       }
     );
     return response.data;
@@ -86,22 +76,60 @@ export async function createTrustline(email: string, currency: string, token: st
   }
 }
 
-export async function createXLMAccount(email: string, token: string, apiUrl: string) {
+export async function createXLMAccount(email: string, token: string, apiUrl?: string) {
   try {
+    const baseUrl = getValidApiUrl(apiUrl);
     const response = await axios.post(
-      `${apiUrl}/xlm/`,
-      { email, currency: 'XLM' },
-      { 
-        headers: { 
-          'Content-Type': 'application/json', 
+      `${baseUrl}/stellar/account`,
+      { email },
+      {
+        headers: {
+          'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`
-        } 
+        }
       }
     );
     return response.data;
   } catch (error) {
     console.error('Error creating XLM account:', error);
+    throw error;
+  }
+}
+
+export async function requestCarbonSink(xlmAddress: string, carbonAmount: string, usdcAmount: string, email: string, token: string, apiUrl?: string) {
+  try {
+    const baseUrl = getValidApiUrl(apiUrl);
+    console.log('Requesting carbon sink with params:', {
+      email,
+      funder: xlmAddress,
+      carbon_amount: carbonAmount,
+      usdc_amount: usdcAmount,
+      baseUrl
+    });
+
+    const response = await axios.post(
+      `${baseUrl}/carbon/sink-carbon/xdr`,
+      {
+        email,
+        funder: xlmAddress,
+        recipient: xlmAddress,
+        carbon_amount: carbonAmount,
+        usdc_amount: usdcAmount,
+        payment_asset: 'USDC',
+        vcs_project_id: 1360
+      },
+      { 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Error requesting carbon sink:', error);
     throw error;
   }
 }

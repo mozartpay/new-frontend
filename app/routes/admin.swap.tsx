@@ -56,23 +56,37 @@ interface SwapFormData {
   slippageTolerance: number;
 }
 
+interface CurrencyData {
+  id: string;
+  rank: string;
+  symbol: string;
+  name: string;
+  priceUsd: string;
+  changePercent24Hr: string;
+  volumeUsd24Hr: string;
+  marketCapUsd: string;
+}
+
+type ApiResponse = CurrencyData[];
+
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
   if (!user) {
     return redirect("/signin");
   }
-  return json({ user });
+  return json({ user, ENV: { LOCAL_API_URL: process.env.LOCAL_API_URL } });
 };
 
 export default function Swap() {
-  const { user } = useLoaderData<{ user: any }>();
+  const { user, ENV } = useLoaderData<{ user: any; ENV: { LOCAL_API_URL: string } }>();
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<React.ReactNode | null>(null);
   const [estimatedAmount, setEstimatedAmount] = useState('');
   const [exchangeRate, setExchangeRate] = useState<string | null>(null);
-  const apiUrl = typeof window !== 'undefined' ? window.ENV.API_URL : 'http://localhost:8000/api';
+  const [currencyRates, setCurrencyRates] = useState<{ [key: string]: number }>({});
+  const apiUrl = ENV.LOCAL_API_URL || 'http://localhost:8000/api';
   const token = user?.token;
 
   const [formData, setFormData] = useState<SwapFormData>({
@@ -121,6 +135,34 @@ export default function Swap() {
       setBalances([]);
     }
   };
+
+  // Fetch currency rates
+  useEffect(() => {
+    const fetchCurrencyRates = async () => {
+      try {
+        console.log('Fetching currency rates from:', apiUrl);
+        const response = await axios.get<ApiResponse>(`${apiUrl}/oracle/currencies`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const rates: { [key: string]: number } = {};
+        
+        response.data.forEach(currency => {
+          rates[currency.symbol] = parseFloat(currency.priceUsd);
+        });
+        
+        setCurrencyRates(rates);
+      } catch (error) {
+        console.error('Failed to fetch currency rates:', error);
+      }
+    };
+
+    fetchCurrencyRates();
+    // Refresh rates every 30 seconds
+    const interval = setInterval(fetchCurrencyRates, 30000);
+    return () => clearInterval(interval);
+  }, [apiUrl, token]);
 
   const getBalance = (assetCode: string, assetIssuer?: string): string => {
     const balance = balances.find(b => {
@@ -186,19 +228,17 @@ export default function Swap() {
         const destAmount = parseFloat(amount);           // Amount of destination asset wanted
         
         if (!isNaN(sourceAmount) && !isNaN(destAmount) && sourceAmount !== 0) {
-          // Calculate actual rate: how much destination asset you get for 1 unit of source asset
-          const actualRate = destAmount / sourceAmount;
+          // Get expected rate from real-time currency data
+          const sourceRate = currencyRates[formData.sourceAsset.code] || 0;
+          const destRate = currencyRates[formData.destinationAsset.code] || 0;
           
-          // Get expected rate based on market prices
-          const expectedRate = formData.destinationAsset.code === 'USDC' 
-            ? 1 / 2.19867  // When receiving USDC, expect 1/2.19867 USDC per XLM
-            : formData.destinationAsset.code === 'EURC'
-              ? 1 / 2.26711 // When receiving EURC, expect 1/2.26711 EURC per XLM
-              : formData.sourceAsset.code === 'USDC'
-                ? 0.454821   // When sending USDC, expect 0.454821 XLM per USDC
-                : 0.441090;  // When sending EURC, expect 0.441090 XLM per EURC
+          let expectedRate = 1;
+          if (sourceRate && destRate) {
+            expectedRate = destRate / sourceRate;
+          }
 
           // Calculate rate deviation from market price
+          const actualRate = destAmount / sourceAmount;
           const deviation = Math.abs((actualRate - expectedRate) / expectedRate) * 100;
           
           console.log('Rate analysis:', {
@@ -208,12 +248,27 @@ export default function Swap() {
             expectedRate,
             deviationPercent: deviation.toFixed(2) + '%',
             sourceAsset: formData.sourceAsset.code,
-            destinationAsset: formData.destinationAsset.code
+            destinationAsset: formData.destinationAsset.code,
+            marketRates: {
+              [formData.sourceAsset.code]: sourceRate,
+              [formData.destinationAsset.code]: destRate
+            }
           });
 
           // Warn if rate deviates too much from market rate
-          if (deviation > 5) { // More than 5% deviation
-            setError(`Warning: Rate deviates ${deviation.toFixed(1)}% from market price. Expected rate: ${expectedRate.toFixed(7)}`);
+          if (deviation > 5) {
+            setError(
+              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
+                <p className="font-medium">
+                  Heads up! 🚨 The exchange rate seems unusual.
+                </p>
+                <p className="text-sm mt-1">
+                  You might be getting a not-so-good deal right now. The current rate is quite different 
+                  from what we usually see (about {deviation.toFixed(1)}% different).
+                  Maybe try again in a little while?
+                </p>
+              </div>
+            );
           } else {
             setError(null);
           }
