@@ -55,7 +55,7 @@ export const loader: LoaderFunction = async ({ request }) => {
       return redirect("/signin");
     }
     // Use default API URL if environment variable is not set
-    const apiUrl = process.env.LOCAL_API_URL || 'http://localhost:8000/api';
+    const apiUrl = process.env.API_URL || 'http://localhost:8000/api';
     return json({ user, apiUrl, token: user.token });
   } catch (error) {
     console.error("Error processing user data:", error);
@@ -117,6 +117,7 @@ export default function AdminWithdraw() {
   const [carbonCreditsEnabled, setCarbonCreditsEnabled] = useState<boolean>(false);
   const [showCarbonCreditsOption, setShowCarbonCreditsOption] = useState<boolean>(false);
   const [explorerUrls, setExplorerUrls] = useState<string[]>([]);
+  const [network, setNetwork] = useState<'testnet' | 'mainnet'>(loaderUser?.preferredNetwork || 'testnet');
   const navigate = useNavigate();
   const { user, setUser } = useUser();
 
@@ -182,6 +183,11 @@ export default function AdminWithdraw() {
     setCarbonCreditsEnabled(enabled);
   };
 
+  const handleNetworkChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setNetwork(event.target.value as 'testnet' | 'mainnet');
+    setError(null);
+  };
+
   const handleWithdrawClick = async () => {
     console.log('Withdraw button clicked with:', {
       amount,
@@ -222,7 +228,8 @@ export default function AdminWithdraw() {
         currency,
         carbonCreditsEnabled,
         user: loaderUser.email,
-        xlmAddress
+        xlmAddress,
+        network
       });
 
       if (!loaderUser) {
@@ -236,7 +243,6 @@ export default function AdminWithdraw() {
       }
 
       const assetType = currency as 'XLM' | 'USDC';
-      const network = loaderUser.preferredNetwork || 'testnet';
 
       let carbonQuote = null;
       let carbonSinkData = null;
@@ -343,7 +349,8 @@ export default function AdminWithdraw() {
       let newExplorerUrls = [];
       
       if (withdrawalResponse.data?.result?.hash) {
-        newExplorerUrls.push(`https://stellar.expert/explorer/${network}/tx/${withdrawalResponse.data.result.hash}`);
+        const networkPath = network === 'mainnet' ? 'public' : 'testnet';
+        newExplorerUrls.push(`https://stellar.expert/explorer/${networkPath}/tx/${withdrawalResponse.data.result.hash}`);
       }
       
       setExplorerUrls(newExplorerUrls);
@@ -396,14 +403,40 @@ export default function AdminWithdraw() {
   return (
     <div className="admin-withdraw">
       <h1>Withdraw Funds</h1>
-      <select value={currency} onChange={handleCurrencyChange}>
-        <option value="">Select currency</option>
-        {balances.map((balance) => (
-          <option key={balance.asset_code} value={balance.asset_code}>
-            {balance.asset_code}
-          </option>
-        ))}
-      </select>
+
+      <div className="mb-4">
+        <label htmlFor="network" className="block text-sm font-medium text-gray-700 mb-2">
+          Network
+        </label>
+        <select
+          id="network"
+          value={network}
+          onChange={handleNetworkChange}
+          className="w-full p-2 border border-gray-300 rounded-md"
+        >
+          <option value="testnet">Testnet</option>
+          <option value="mainnet">Mainnet</option>
+        </select>
+      </div>
+
+      <div className="mb-4">
+        <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-2">
+          Currency
+        </label>
+        <select
+          id="currency"
+          value={currency}
+          onChange={handleCurrencyChange}
+          className="w-full p-2 border border-gray-300 rounded-md"
+        >
+          <option value="">Select currency</option>
+          {balances.map((balance) => (
+            <option key={balance.asset_code} value={balance.asset_code}>
+              {balance.asset_code}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {currency && (
         <div className="balance-info">

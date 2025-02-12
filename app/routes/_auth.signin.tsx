@@ -8,7 +8,7 @@ export const loader: LoaderFunction = async ({ request }) => {
   // Check if user is already logged in and redirect if they are
   await checkAuthenticatedRedirect(request);
 
-  const apiUrl = process.env.LOCAL_API_URL;
+  const apiUrl = process.env.API_URL;
   if (!apiUrl) {
     console.error("API_URL is not defined");
     return json({ message: "API_URL is not configured properly", error: true }, { status: 500 });
@@ -21,7 +21,7 @@ export const action: ActionFunction = async ({ request }) => {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
 
-  const apiUrl = process.env.LOCAL_API_URL;
+  const apiUrl = process.env.API_URL;
   if (!apiUrl) {
     console.error("LOCAL_API_URL environment variable is not configured");
     return json({ error: "LOCAL_API_URL is not configured properly" }, { status: 500 });
@@ -58,16 +58,20 @@ export const action: ActionFunction = async ({ request }) => {
         }
 
         const hideBalances = data.user.preferences?.hideBalances ?? true;
+        const preferredNetwork = data.user.preferredNetwork || 'testnet';
         
-        // Update the backend with the initial preference if not set
-        if (data.user.preferences?.hideBalances === undefined) {
+        // Update the backend with the initial preferences if not set
+        if (data.user.preferences?.hideBalances === undefined || !data.user.preferredNetwork) {
           const preferencesResponse = await fetch(`${apiUrl}/profile/${data.user.email}/preferences`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${data.token}`
             },
-            body: JSON.stringify({ hideBalances })
+            body: JSON.stringify({ 
+              hideBalances,
+              preferredNetwork
+            })
           });
 
           if (!preferencesResponse.ok) {
@@ -82,13 +86,16 @@ export const action: ActionFunction = async ({ request }) => {
           token: data.token,
           preferences: {
             ...data.user.preferences,
-            hideBalances
-          }
+            hideBalances,
+            network: preferredNetwork
+          },
+          preferredNetwork
         };
 
         console.log('Creating user session with data:', { 
           userId: userSession.id,
-          hasPreferences: !!userSession.preferences
+          hasPreferences: !!userSession.preferences,
+          network: userSession.preferredNetwork
         });
 
         return createUserSession(JSON.stringify(userSession), '/admin');

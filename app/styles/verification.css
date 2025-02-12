@@ -97,3 +97,33 @@
   margin: 1rem 0;
   text-align: center;
 }
+
+.success-message {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.resend-section {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.resend-button {
+  background: none;
+  border: none;
+  color: #0066cc;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
+.resend-button:disabled {
+  color: #666;
+  cursor: not-allowed;
+  text-decoration: none;
+}

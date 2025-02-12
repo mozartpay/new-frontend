@@ -4,6 +4,7 @@ import { json, LoaderFunction, redirect } from '@remix-run/node';
 import axios from 'axios';
 import { getUserFromSession } from '~/sessions/index';
 import { useUser } from '~/context/UserContext';
+import { User } from '~/types/user';
 import "~/styles/admin.css";
 
 interface CurrencySymbols {
@@ -19,26 +20,45 @@ const currencySymbols: CurrencySymbols = {
   XLM: '*',
 };
 
+type LoaderData = {
+  user: User;
+  apiUrl: string;
+  token: string;
+};
+
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
 
-  if (!user) {
+  if (!user || !user.email) {
+    console.error("No user found in session");
     return redirect("/signin");
   }
 
   try {
-    if (!user.email || !user.isAuthorized) {
-      return redirect("/signin");
+    // Check authorization status
+    if (!user.isAuthorized) {
+      console.error("User is not authorized");
+      return redirect("/unauthorized");
     }
-    return json({ user, apiUrl: process.env.API_URL, token: user.token });
+
+    const apiUrl = process.env.API_URL;
+    if (!apiUrl) {
+      throw new Error('API URL not configured');
+    }
+
+    return json({ 
+      user, 
+      apiUrl, 
+      token: user.token 
+    });
   } catch (error) {
-    console.error("Error processing user data:", error);
-    return redirect("/signin");
+    console.error("Error in admin send loader:", error);
+    throw new Error(`Admin access error: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
 export default function AdminSend() {
-  const { user: loaderUser, apiUrl, token } = useLoaderData<{ user: any, apiUrl: string, token: string }>();
+  const { user: loaderUser, apiUrl, token } = useLoaderData<LoaderData>();
   const [amount, setAmount] = useState<number | string>(0);
   const [sourceCurrency, setSourceCurrency] = useState<string>('XLM');
   const [showModal, setShowModal] = useState(false);
@@ -48,7 +68,11 @@ export default function AdminSend() {
   const [receiverName, setReceiverName] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [balances, setBalances] = useState<{ [key: string]: string }>({});
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+  const [balanceError, setBalanceError] = useState<string>('');
   const [amountError, setAmountError] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState('');
   const navigate = useNavigate();
   const { user, setUser } = useUser();
 
@@ -56,7 +80,20 @@ export default function AdminSend() {
     if (!loaderUser) {
       navigate('/signin');
     } else if (!user) {
-      setUser(loaderUser);
+      const completeUser = {
+        ...loaderUser,
+        isAuthorized: loaderUser.isAuthorized ?? false,
+        token: loaderUser.token,
+        isPhoneVerified: loaderUser.isPhoneVerified ?? false,
+        preferences: loaderUser.preferences ?? {
+          hideBalances: false,
+          currency: 'USD',
+          network: 'mainnet'
+        },
+        publicKeyXlmTestnet: loaderUser.publicKeyXlmTestnet ?? '',
+        publicKeyXlmMainnet: loaderUser.publicKeyXlmMainnet ?? ''
+      };
+      setUser(completeUser);
     }
   }, [loaderUser, user, setUser, navigate]);
 
@@ -68,15 +105,24 @@ export default function AdminSend() {
 
   const fetchBalances = async () => {
     try {
-      if (!user || !user.email) return;
+      if (!user?.email) return;
+      
+      setIsLoadingBalances(true);
+      setBalanceError('');
 
       const response = await axios.get(
         `${apiUrl}/balance?email=${encodeURIComponent(user.email)}`, 
-        { headers: { 'Content-Type': 'application/json' } }
+        { 
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json' 
+          } 
+        }
       );
+      
       const apiBalances = response.data.balances || [];
-
       const formattedBalances: { [key: string]: string } = {};
+      
       apiBalances.forEach((balance: any) => {
         const currency = balance.asset_code || 'XLM';
         formattedBalances[currency] = balance.balance;
@@ -85,29 +131,56 @@ export default function AdminSend() {
       setBalances(formattedBalances);
     } catch (error) {
       console.error('Error fetching balances:', error);
+      setBalanceError('Failed to fetch balances. Please try again.');
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        navigate('/signin');
+      }
+    } finally {
+      setIsLoadingBalances(false);
     }
   };
 
-  useEffect(() => {
-    const sourceBalance = parseFloat(balances[sourceCurrency] || '0');
-    if (parseFloat(amount as string) > sourceBalance) {
-      setAmountError('Insufficient funds');
-    } else {
-      setAmountError('');
+  const validateInputs = (): string | null => {
+    if (!receiverEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      return 'Please enter a valid email address';
     }
-  }, [amount, sourceCurrency, balances]);
+
+    if (!receiverName.trim() || receiverName.length < 2) {
+      return 'Please enter a valid name (minimum 2 characters)';
+    }
+
+    if (!amount || Number(amount) <= 0) {
+      return 'Please enter a valid amount';
+    }
+
+    const numAmount = Number(amount);
+    if (numAmount > 1000000) {
+      return 'Amount exceeds maximum transfer limit';
+    }
+
+    const sourceBalance = parseFloat(balances[sourceCurrency] || '0');
+    if (numAmount > sourceBalance) {
+      return 'Insufficient funds';
+    }
+
+    return null;
+  };
 
   const handleForwardClick = () => {
-    if (!receiverEmail || !receiverName) {
+    const error = validateInputs();
+    if (error) {
       setShowErrorModal(true);
+      setErrorMessage(error);
       return;
     }
     setShowModal(true);
   };
 
   const handleSend = async () => {
-    if (!receiverEmail || !receiverName || !user) {
+    const error = validateInputs();
+    if (error || !user) {
       setShowErrorModal(true);
+      setErrorMessage(error || 'User session expired');
       return;
     }
 
@@ -118,21 +191,47 @@ export default function AdminSend() {
         {
           senderEmail: user.email,
           amount: amount.toString(),
-          sourceCurrency,
           receiverEmail,
           receiverName,
+          network: user.preferences?.network || 'testnet'
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         }
       );
 
-      if (response.status === 201) {
+      if (response.status === 200) {
         setShowModal(false);
+        setSuccessMessage(
+          `Transaction completed successfully! ${receiverName} will receive an email at ${receiverEmail} with instructions to access their funds.`
+        );
         setShowSuccessModal(true);
+        fetchBalances(); // Refresh balances after successful send
       }
     } catch (error) {
       console.error('Error sending data:', error);
+      let errorMessage = 'There was an issue processing your transaction.';
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          navigate('/signin');
+          return;
+        }
+        if (error.response?.data?.error?.includes('public key')) {
+          errorMessage = `We'll create a new account for ${receiverName} and send instructions to ${receiverEmail}.`;
+        } else {
+          errorMessage = error.response?.data?.details || error.response?.data?.error || errorMessage;
+        }
+      }
+      
+      setErrorMessage(errorMessage);
       setShowErrorModal(true);
     } finally {
       setIsSending(false);
+      setShowModal(false);
     }
   };
 
@@ -169,6 +268,14 @@ export default function AdminSend() {
         <p className="balance-info">
           Current {sourceCurrency} Balance: {currencySymbols[sourceCurrency]}{balances[sourceCurrency] || '0.00'}
         </p>
+      )}
+
+      {isLoadingBalances && (
+        <p>Loading balances...</p>
+      )}
+
+      {balanceError && (
+        <p className="error">{balanceError}</p>
       )}
 
       <div className="form-group">
@@ -239,10 +346,8 @@ export default function AdminSend() {
       {showSuccessModal && (
         <div className="modal">
           <div className="modal-content">
-            <h2>Transaction Successful</h2>
-            <p>Amount: {currencySymbols[sourceCurrency]}{amount}</p>
-            <p>Receiver: {receiverName} ({receiverEmail})</p>
-            <p>Transaction completed successfully!</p>
+            <h2>Success!</h2>
+            <p>{successMessage}</p>
             <button onClick={handleCloseSuccessModal}>Close</button>
           </div>
         </div>
@@ -250,10 +355,13 @@ export default function AdminSend() {
 
       {showErrorModal && (
         <div className="modal">
-          <div className="modal-content">
+          <div className="modal-content error">
             <h2>Error</h2>
-            <p>There was an issue processing your transaction. Please make sure all details are correct.</p>
-            <button onClick={() => setShowErrorModal(false)}>Close</button>
+            <p>{errorMessage || 'An unexpected error occurred. Please try again.'}</p>
+            <button onClick={() => {
+              setShowErrorModal(false);
+              setErrorMessage('');
+            }}>Close</button>
           </div>
         </div>
       )}

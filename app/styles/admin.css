@@ -743,128 +743,25 @@ body {
   color: white;
 }
 
-/* Dark mode styles */
-.dark-mode .main-content {
-  background-color: #1a202c;
-  color: #e2e8f0;
+/* Switch styles */
+.switch span:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
 }
 
-.dark-mode .admin-page h1 {
-  color: #e2e8f0;
+.switch input:checked + span:before {
+  transform: translateX(26px);
 }
 
-.dark-mode .form-group input,
-.dark-mode .form-group select {
-  background-color: #2d3748;
-  color: #e2e8f0;
-  border-color: #4a5568;
-}
-
-.dark-mode .button {
-  background-color: #4a5568;
-}
-
-.dark-mode .button:hover {
-  background-color: #718096;
-}
-
-.dark-mode .button:disabled {
-  background-color: #2d3748;
-}
-
-.dark-mode .modal-content {
-  background-color: #2d3748;
-  color: #e2e8f0;
-}
-
-.dark-mode .payment-method-card {
-  background-color: #2d3748;
-}
-
-.dark-mode .balance-info,
-.dark-mode .key-container {
-  background-color: #4a5568;
-}
-
-.dark-mode .input-group-text {
-  background-color: #4a5568;
-  border-color: #718096;
-}
-
-.dark-mode .payment-requests-table th,
-.dark-mode .payment-requests-table td {
-  border-color: #4a5568;
-}
-
-.dark-mode .payment-requests-table th {
-  background-color: #2d3748;
-}
-
-.key-container {
-  background-color: #edf2f7;
-  padding: 10px;
-  border-radius: 4px;
-  margin-top: 10px;
-}
-
-/* Specific styles for admin.send and admin.request */
-.input-group {
-  display: flex;
-  align-items: center;
-}
-
-.input-group-text {
-  background-color: #edf2f7;
-  padding: 10px;
-  border: 1px solid #e2e8f0;
-  border-right: none;
-  border-radius: 4px 0 0 4px;
-}
-
-.input-group input {
-  border-left: none;
-  border-radius: 0 4px 4px 0;
-}
-
-/* Specific styles for admin.manage */
-.payment-requests-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.payment-requests-table th,
-.payment-requests-table td {
-  border: 1px solid #e2e8f0;
-  padding: 10px;
-  text-align: left;
-}
-
-.payment-requests-table th {
-  background-color: #edf2f7;
-  font-weight: bold;
-}
-
-.action-button {
-  margin-right: 5px;
-  padding: 5px 10px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.action-button.accept {
-  background-color: #48bb78;
-  color: white;
-}
-
-.action-button.decline {
-  background-color: #f56565;
-  color: white;
-}
-
-.action-button.view {
-  background-color: #4299e1;
-  color: white;
+.switch input:focus + span {
+  box-shadow: 0 0 1px #2196F3;
 }
 
 .network-badge {

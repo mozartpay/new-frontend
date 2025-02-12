@@ -22,6 +22,13 @@ const NETWORK_OPTIONS = [
   { value: 'testnet', label: 'Testnet', description: 'Test network for development and testing', url: 'https://horizon-testnet.stellar.org' }
 ];
 
+// Define loader data type
+interface LoaderData {
+  success: boolean;
+  user: User;
+  apiUrl: string;
+}
+
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
   
@@ -34,7 +41,7 @@ export const loader: LoaderFunction = async ({ request }) => {
       return redirect("/signin");
     }
 
-    const apiUrl = process.env.LOCAL_API_URL;
+    const apiUrl = process.env.API_URL;
     if (!apiUrl) {
       throw new Error("API_URL is not configured");
     }
@@ -53,18 +60,16 @@ export const loader: LoaderFunction = async ({ request }) => {
 // Type definition for form data
 type ProfileFormData = {
   hideBalances?: boolean;
-  currency?: string;
-  network?: string;
   preferredCurrency?: string;
+  preferredNetwork?: string;
 };
 
 export const action: ActionFunction = async ({ request }) => {
-    type ActionFormData = ProfileFormData;  // Use our ProfileFormData type for the action
-    
     try {
         const session = await getSession(request);
         const formData = await request.formData();
         const preferredCurrency = formData.get("preferredCurrency") as string;
+        const preferredNetwork = formData.get("preferredNetwork") as string;
 
         const encryptedUser = session.get("user");
         if (!encryptedUser) {
@@ -72,10 +77,27 @@ export const action: ActionFunction = async ({ request }) => {
         }
 
         let user = JSON.parse(decrypt(encryptedUser));
-        user.preferredCurrency = preferredCurrency;
+        
+        // Update the user object with any provided preferences
+        if (preferredCurrency) {
+            user.preferredCurrency = preferredCurrency;
+        }
+        if (preferredNetwork) {
+            user.preferredNetwork = preferredNetwork;
+            user.preferences = {
+              ...user.preferences,
+              network: preferredNetwork
+            };
+        }
+
+        // Encrypt and save the updated user data
         session.set("user", encrypt(JSON.stringify(user)));
 
-        return json({ success: true, preferredCurrency }, {
+        return json({ 
+            success: true, 
+            preferredCurrency,
+            preferredNetwork 
+        }, {
             headers: {
                 "Set-Cookie": await commitSession(session),
             },
@@ -84,25 +106,24 @@ export const action: ActionFunction = async ({ request }) => {
         console.error("Action error:", error);
         return json({ 
             success: false, 
-            error: "Failed to update preferred currency" 
+            error: "Failed to update user preferences" 
         }, { status: 400 });
     }
 };
 
 export default function AdminProfile() {
-  const { user: initialUser, apiUrl } = useLoaderData<{ user: User, apiUrl: string }>();
-  const [user, setUser] = useState(initialUser);
+  const { user: loaderUser, apiUrl } = useLoaderData<LoaderData>();
+  const fetcher = useFetcher();
+  const navigate = useNavigate();
+  const { user, setUser, updatePreferences } = useUser();
+  const [isClient, setIsClient] = useState(false);
   const [privateKey, setPrivateKey] = useState<string | null>(null);
   const [isPrivateKeyBlurred, setIsPrivateKeyBlurred] = useState<boolean>(true);
   const [loadingPrivateKey, setLoadingPrivateKey] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
-  const { updatePreferences } = useUser();
-  const fetcher = useFetcher();
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
   const [userImage, setUserImage] = useState<string | null>(null);
   const [networkChangeMessage, setNetworkChangeMessage] = useState<string | null>(null);
-  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -114,6 +135,34 @@ export default function AdminProfile() {
     }
   }, [user, navigate]);
 
+  useEffect(() => {
+    // Get stored preferences
+    const storedPreferences = localStorage.getItem('userPreferences');
+    const parsedPreferences = storedPreferences ? JSON.parse(storedPreferences) : null;
+    
+    if (user) {
+      // Prioritize order: user preferences > stored preferences > default
+      const network = user.preferences?.network ?? parsedPreferences?.network ?? 'mainnet';
+      
+      // Ensure network preference is synchronized
+      setUser(prevUser => prevUser ? {
+        ...prevUser,
+        preferences: {
+          ...prevUser.preferences,
+          network
+        },
+        preferredNetwork: network
+      } : null);
+      
+      // Update localStorage
+      localStorage.setItem('userPreferences', JSON.stringify({
+        ...parsedPreferences,
+        network,
+        preferredNetwork: network
+      }));
+    }
+  }, []);
+
   const fetchUserData = useCallback(async () => {
     if (!user?.email) return;
 
@@ -121,12 +170,25 @@ export default function AdminProfile() {
       const response = await axios.get(`${apiUrl}/profile/${user.email}`);
       const userData = response.data;
       
-      setUser(prevUser => {
-        if (JSON.stringify(prevUser) !== JSON.stringify(userData)) {
-          return { ...prevUser, ...userData };
-        }
-        return prevUser;
+      console.log('Fetched user data:', {
+        currentNetwork: user?.preferences?.network,
+        newNetwork: userData?.preferences?.network,
+        testnetKey: userData?.publicKeyXlmTestnet,
+        mainnetKey: userData?.publicKeyXlmMainnet
       });
+      
+      setUser(prevUser => prevUser ? {
+        ...prevUser, 
+        preferences: {
+          hideBalances: userData.preferences?.hideBalances ?? false,
+          currency: userData.preferences?.currency ?? 'USD',
+          network: userData.preferences?.network ?? prevUser.preferences?.network ?? 'mainnet'
+        },
+        preferredNetwork: userData.preferences?.network ?? prevUser.preferences?.network ?? 'mainnet',
+        publicKeyXlmTestnet: userData.publicKeyXlmTestnet || prevUser.publicKeyXlmTestnet,
+        publicKeyXlmMainnet: userData.publicKeyXlmMainnet || prevUser.publicKeyXlmMainnet,
+        ...userData 
+      } : null);
       
       if (userData.image && userData.image !== userImage) {
         setUserImage(userData.image);
@@ -136,6 +198,13 @@ export default function AdminProfile() {
       setError('Failed to load user data. Please try again later.');
     }
   }, [user?.email, userImage, apiUrl]);
+
+  useEffect(() => {
+    console.log('Current user state:', {
+      preferredNetwork: user?.preferredNetwork,
+      networkInPreferences: user?.preferences?.network
+    });
+  }, [user]);
 
   useEffect(() => {
     if (user?.email) {
@@ -160,6 +229,10 @@ export default function AdminProfile() {
       if (!privateKey) {
         try {
           setLoadingPrivateKey(true);
+          if (!user) {
+            console.error('User data is not available');
+            return;
+          }
           console.log('Attempting to fetch private key for:', user.email);
           const response = await axios.post(
             `${apiUrl}/xlm/decrypt`,
@@ -198,6 +271,11 @@ export default function AdminProfile() {
   const handlePreferredCurrencyChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const newPreferredCurrency = event.target.value;
     
+    if (!user) {
+      console.error('User not found');
+      return;
+    }
+
     try {
       const response = await axios.post(`${apiUrl}/profile/preferredCurrency`, {
         email: user.email,
@@ -205,7 +283,15 @@ export default function AdminProfile() {
       });
       if (response.data?.message || response.data?.success) {
         updatePreferences({ currency: newPreferredCurrency });
-        setUser(prevUser => ({ ...prevUser, preferredCurrency: newPreferredCurrency }));
+        setUser(prevUser => prevUser ? {
+          ...prevUser, 
+          preferences: {
+            hideBalances: prevUser.preferences?.hideBalances ?? false,
+            currency: newPreferredCurrency,
+            network: prevUser.preferences?.network ?? 'mainnet'
+          },
+          preferredCurrency: newPreferredCurrency 
+        } : null);
         setConfirmationMessage(`Preferred currency set to ${newPreferredCurrency}`);
         
         // Update the session
@@ -229,13 +315,19 @@ export default function AdminProfile() {
       reader.onloadend = async () => {
         const base64Image = reader.result as string;
         try {
+          if (!user) {
+            throw new Error('User not found');
+          }
           const response = await axios.post(`${apiUrl}/api/profile/image`, {
             email: user.email,
             image: base64Image
           });
           if (response.data.message === 'User image updated successfully') {
             setUserImage(base64Image);
-            setUser({ ...user, image: base64Image });
+            setUser(prevUser => prevUser ? {
+              ...prevUser, 
+              image: base64Image 
+            } : null);
           }
         } catch (error) {
           console.error('Error updating user image:', error);
@@ -258,30 +350,50 @@ export default function AdminProfile() {
 
   const handlePreferredNetworkChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const newNetwork = event.target.value;
+    if (!user?.email) return;
     
     try {
+      // Update local state immediately for UI responsiveness
+      setUser(prevUser => prevUser ? {
+        ...prevUser,
+        preferences: {
+          ...prevUser.preferences,
+          network: newNetwork
+        },
+        preferredNetwork: newNetwork
+      } : null);
+
+      // Update context
+      updatePreferences({ network: newNetwork });
+
+      // Store in localStorage
+      const storedPreferences = localStorage.getItem('userPreferences');
+      const parsedPreferences = storedPreferences ? JSON.parse(storedPreferences) : {};
+      localStorage.setItem('userPreferences', JSON.stringify({
+        ...parsedPreferences,
+        network: newNetwork,
+        preferredNetwork: newNetwork
+      }));
+
+      // Update backend
       const response = await axios.post(`${apiUrl}/profile/preferredNetwork`, {
         email: user.email,
         preferredNetwork: newNetwork
+      }, {
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json'
+        },
+        withCredentials: true
       });
-      
+
       if (response.data?.status === 'success') {
         const networkOption = NETWORK_OPTIONS.find(opt => opt.value === newNetwork);
-        updatePreferences({ network: networkOption?.url || 'testnet' });
-        setUser(prevUser => ({
-          ...prevUser,
-          preferences: {
-            ...prevUser.preferences,
-            network: networkOption?.url || 'testnet',
-            hideBalances: prevUser.preferences?.hideBalances ?? false,
-            currency: prevUser.preferences?.currency ?? 'USD'
-          },
-          preferredNetwork: networkOption?.url || 'testnet'
-        }));
         setNetworkChangeMessage(`Network changed to ${networkOption?.label}`);
         
+        // Update session
         fetcher.submit(
-          { network: networkOption?.url || 'testnet' } as ProfileFormData,
+          { network: newNetwork, preferredNetwork: newNetwork } as ProfileFormData,
           { method: "post" }
         );
       } else {
@@ -289,19 +401,23 @@ export default function AdminProfile() {
       }
     } catch (error) {
       console.error('Error updating network:', error);
+      // Revert local state if there's an error
+      const storedPreferences = localStorage.getItem('userPreferences');
+      const parsedPreferences = storedPreferences ? JSON.parse(storedPreferences) : {};
+      const fallbackNetwork = parsedPreferences.network ?? 'mainnet';
+      
+      setUser(prevUser => prevUser ? {
+        ...prevUser,
+        preferences: {
+          ...prevUser.preferences,
+          network: fallbackNetwork
+        },
+        preferredNetwork: fallbackNetwork
+      } : null);
+      
       setError(error instanceof Error ? error.message : 'Failed to update network. Please try again.');
     }
   };
-
-  useEffect(() => {
-    if (networkChangeMessage) {
-      const timer = setTimeout(() => {
-        setNetworkChangeMessage(null);
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [networkChangeMessage]);
 
   const renderPrivateKeySection = () => {
     if (!isClient) {
@@ -312,24 +428,50 @@ export default function AdminProfile() {
       <div className="profile-section">
         <h3>Private Key</h3>
         <div className="key-container" style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
-          <span 
-            className={isPrivateKeyBlurred ? 'blurred' : ''} 
-            style={{ 
-              flex: 1, 
+          <div style={{ flex: 1, position: 'relative' }}>
+            <span style={{ 
+              display: 'block',
               padding: '10px', 
               backgroundColor: '#f0f0f0', 
               borderRadius: '4px',
-              filter: isPrivateKeyBlurred ? 'blur(5px)' : 'none'
+              filter: isPrivateKeyBlurred ? 'blur(4px)' : 'none',
+              transition: 'filter 0.3s ease'
+            }}>
+              {loadingPrivateKey ? 'Loading...' : (privateKey ? truncateKey(privateKey) : 'Click to reveal')}
+            </span>
+            <button
+              onClick={togglePrivateKeyBlur}
+              style={{
+                position: 'absolute',
+                right: '10px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              {isPrivateKeyBlurred ? '👁️' : '🔒'}
+            </button>
+          </div>
+          <button 
+            onClick={() => copyToClipboard(privateKey)}
+            disabled={!privateKey || isPrivateKeyBlurred}
+            style={{ 
+              marginLeft: '10px',
+              padding: '8px 16px',
+              backgroundColor: '#f0f0f0',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              cursor: privateKey && !isPrivateKeyBlurred ? 'pointer' : 'not-allowed',
+              opacity: privateKey && !isPrivateKeyBlurred ? 1 : 0.6
             }}
           >
-            {loadingPrivateKey ? 'Loading...' : (privateKey ? truncateKey(privateKey) : 'Hidden')}
-          </span>
-          <button onClick={togglePrivateKeyBlur} disabled={loadingPrivateKey} style={{ marginLeft: '10px' }}>
-            {isPrivateKeyBlurred ? 'Show' : 'Hide'}
+            Copy
           </button>
-          {!isPrivateKeyBlurred && privateKey && (
-            <button onClick={() => copyToClipboard(privateKey)} style={{ marginLeft: '10px' }}>Copy</button>
-          )}
+        </div>
+        <div style={{ marginTop: '5px', fontSize: '0.8em', color: '#666' }}>
+          {isPrivateKeyBlurred ? 'Click the eye icon to reveal' : 'Keep this key secure and private'}
         </div>
       </div>
     );
@@ -372,8 +514,8 @@ export default function AdminProfile() {
               boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
             }}
           />
-          <h2 style={{ marginTop: '10px', color: '#333' }}>{user.name}</h2>
-          <p style={{ color: '#666' }}>{user.email}</p>
+          <h2 style={{ marginTop: '10px', color: '#333' }}>{loaderUser.name}</h2>
+          <p style={{ color: '#666' }}>{loaderUser.email}</p>
         </div>
       </div>
 
@@ -385,6 +527,104 @@ export default function AdminProfile() {
         borderRadius: '8px',
         boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}>
+        {/* Network Switch */}
+        <div className="profile-section" style={{ marginBottom: '20px' }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            padding: '15px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '8px',
+            border: '1px solid #e9ecef'
+          }}>
+            <div>
+              <h3 style={{ margin: '0 0 5px 0' }}>Network</h3>
+              <div style={{ 
+                fontSize: '0.9em', 
+                color: '#666'
+              }}>
+                {NETWORK_OPTIONS.find(opt => opt.value === user?.preferences?.network)?.description}
+              </div>
+            </div>
+            <label className="switch" style={{
+              position: 'relative',
+              display: 'inline-block',
+              width: '60px',
+              height: '34px',
+            }}>
+              <input
+                type="checkbox"
+                checked={user?.preferences?.network === 'testnet'}
+                onChange={(e) => {
+                  const newNetwork = e.target.checked ? 'testnet' : 'mainnet';
+                  handlePreferredNetworkChange({ target: { value: newNetwork } } as React.ChangeEvent<HTMLSelectElement>);
+                  // Force reload after network change
+                  setTimeout(() => window.location.reload(), 500);
+                }}
+                style={{
+                  opacity: 0,
+                  width: 0,
+                  height: 0,
+                }}
+              />
+              <span style={{
+                position: 'absolute',
+                cursor: 'pointer',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: user?.preferences?.network === 'testnet' ? '#2196F3' : '#ccc',
+                transition: '.4s',
+                borderRadius: '34px',
+                ...(user?.preferences?.network === 'testnet' ? { '&::before': {
+                  position: 'absolute',
+                  content: '""',
+                  height: '26px',
+                  width: '26px',
+                  left: '4px',
+                  bottom: '4px',
+                  backgroundColor: 'white',
+                  transition: '.4s',
+                  borderRadius: '50%',
+                  transform: 'translateX(26px)',
+                } as any } : { '&::before': {
+                  position: 'absolute',
+                  content: '""',
+                  height: '26px',
+                  width: '26px',
+                  left: '4px',
+                  bottom: '4px',
+                  backgroundColor: 'white',
+                  transition: '.4s',
+                  borderRadius: '50%',
+                  transform: 'translateX(0)',
+                } as any })
+              }}></span>
+            </label>
+          </div>
+          <AnimatePresence>
+            {networkChangeMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                style={{
+                  marginTop: '10px',
+                  padding: '8px 12px',
+                  backgroundColor: '#e8f5e9',
+                  color: '#2e7d32',
+                  borderRadius: '4px',
+                  fontSize: '0.9em'
+                }}
+              >
+                {networkChangeMessage}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         <div className="profile-section">
           <h3>Profile Picture</h3>
           <input type="file" accept="image/*" onChange={handleImageUpload} style={{ marginTop: '10px' }} />
@@ -392,11 +632,63 @@ export default function AdminProfile() {
 
         <div className="profile-section">
           <h3>Public Key</h3>
-          <div className="key-container" style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
-            <span style={{ flex: 1, padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
-              {truncateKey(user.publicKeyXlm)}
-            </span>
-            <button onClick={() => copyToClipboard(user.publicKeyXlm)} style={{ marginLeft: '10px' }}>Copy</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
+            {user?.preferences?.network === 'mainnet' ? (
+              user?.publicKeyXlmMainnet ? (
+                <>
+                  <div style={{ flex: 1, padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px', fontFamily: 'monospace' }}>
+                    {truncateKey(user.publicKeyXlmMainnet)}
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(user.publicKeyXlmMainnet)}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#f8f9fa',
+                      border: '1px solid #dee2e6',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Copy
+                  </button>
+                </>
+              ) : (
+                <span style={{ flex: 1, padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px', color: '#666' }}>
+                  No mainnet public key available
+                </span>
+              )
+            ) : (
+              user?.publicKeyXlmTestnet ? (
+                <>
+                  <div style={{ flex: 1, padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px', fontFamily: 'monospace' }}>
+                    {truncateKey(user.publicKeyXlmTestnet)}
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(user.publicKeyXlmTestnet)}
+                    style={{
+                      padding: '10px 20px',
+                      backgroundColor: '#f8f9fa',
+                      border: '1px solid #dee2e6',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Copy
+                  </button>
+                </>
+              ) : (
+                <span style={{ flex: 1, padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px', color: '#666' }}>
+                  No testnet public key available
+                </span>
+              )
+            )}
+          </div>
+          <div style={{ 
+            marginTop: '5px', 
+            fontSize: '0.8em', 
+            color: '#666' 
+          }}>
+            Showing {user?.preferences?.network === 'mainnet' ? 'mainnet' : 'testnet'} public key
           </div>
         </div>
 
@@ -407,8 +699,18 @@ export default function AdminProfile() {
           <div style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
             <select
               name="preferredCurrency"
-              value={user.preferredCurrency || ''}
-              onChange={handlePreferredCurrencyChange}
+              value={user.preferences?.currency || ''}
+              onChange={(e) => {
+                if (user) {
+                  setUser({
+                    ...user,
+                    preferences: {
+                      ...user.preferences,
+                      currency: e.target.value
+                    }
+                  });
+                }
+              }}
               style={{ 
                 flex: 1,
                 padding: '10px',
@@ -445,61 +747,6 @@ export default function AdminProfile() {
           </AnimatePresence>
         </div>
 
-        <div className="profile-section">
-          <h3>Preferred Network</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-            <select
-              name="preferredNetwork"
-              value={NETWORK_OPTIONS.find(opt => 
-                opt.url === (user?.preferences?.network || user?.preferredNetwork)
-              )?.value || ''}
-              onChange={handlePreferredNetworkChange}
-              style={{ 
-                padding: '10px',
-                borderRadius: '4px',
-                border: '1px solid #ccc'
-              }}
-            >
-              <option value="">Select a network</option>
-              {NETWORK_OPTIONS.map((network) => (
-                <option key={network.value} value={network.value}>
-                  {network.label}
-                </option>
-              ))}
-            </select>
-            
-            {(user?.preferences?.network || user?.preferredNetwork) && (
-              <div style={{ 
-                fontSize: '0.9em', 
-                color: '#666',
-                padding: '10px',
-                backgroundColor: '#f5f5f5',
-                borderRadius: '4px'
-              }}>
-                {NETWORK_OPTIONS.find(opt => opt.value === (user?.preferences?.network || user?.preferredNetwork))?.description}
-              </div>
-            )}
-
-            <AnimatePresence>
-              {networkChangeMessage && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.3 }}
-                  style={{
-                    padding: '10px',
-                    backgroundColor: '#4CAF50',
-                    color: 'white',
-                    borderRadius: '4px',
-                  }}
-                >
-                  {networkChangeMessage}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
       </div>
 
       {error && <p className="error" style={{ textAlign: 'center', color: 'red', marginTop: '20px' }}>{error}</p>}

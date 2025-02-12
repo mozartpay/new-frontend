@@ -184,62 +184,153 @@
     background-color: #5a6268;
   }
   
-  .example-popup {
+  .popup-overlay {
     position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
-    max-width: 600px;
-    width: 90%;
-  }
-  
-  .example-content {
-    position: relative;
-  }
-  
-  .example-content pre {
-    background: #f5f5f5;
-    padding: 15px;
-    border-radius: 4px;
-    overflow-x: auto;
-    margin: 10px 0;
-    font-size: 14px;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
   }
 
-.example-buttons {
-display: flex;
-justify-content: flex-end;
-gap: 10px;
-margin-top: 15px;
-}
-.button.secondary {
-background: #6c757d;
-color: white;
-}
-.example-popup .close-button {
-position: absolute;
-top: -10px;
-right: -10px;
-background: #6c757d;
-color: white;
-border: none;
-border-radius: 50%;
-width: 24px;
-height: 24px;
-cursor: pointer;
-display: flex;
-align-items: center;
-justify-content: center;
-}
-.address-text {
-  font-family: monospace;
-  background-color: #f0f0f0;
-  padding: 10px;
-  border-radius: 4px;
-  flex: 1;
-}
+  .example-popup {
+    position: relative;
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-width: 800px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .example-popup h3 {
+    margin: 0 0 20px 0;
+    color: #2d3748;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+
+  .example-popup .current-key {
+    background-color: #f7fafc;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 20px;
+    font-family: monospace;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .example-popup .current-key span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .example-popup .current-key button {
+    padding: 6px 12px;
+    background-color: #4a5568;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    transition: background-color 0.2s;
+  }
+
+  .example-popup .current-key button:hover {
+    background-color: #2d3748;
+  }
+
+  .example-popup pre {
+    background-color: #f7fafc;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 15px 0;
+  }
+
+  .example-popup .close-button {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #718096;
+    cursor: pointer;
+    padding: 5px;
+    line-height: 1;
+    transition: color 0.2s;
+  }
+
+  .example-popup .close-button:hover {
+    color: #4a5568;
+  }
+
+  .example-content {
+    margin-top: 10px;
+  }
+
+  .example-popup .copy-button {
+    margin-top: 15px;
+    padding: 8px 16px;
+    background-color: #4a5568;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+  }
+
+  .example-popup .copy-button:hover {
+    background-color: #2d3748;
+  }
+
+  .example-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 15px;
+  }
+  .button.secondary {
+    background: #6c757d;
+    color: white;
+  }
+  .example-popup .close-button {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .address-text {
+    font-family: monospace;
+    background-color: #f0f0f0;
+    padding: 10px;
+    border-radius: 4px;
+    flex: 1;
+  }

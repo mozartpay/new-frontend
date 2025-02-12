@@ -30,7 +30,8 @@ export const loader: LoaderFunction = async ({ request }) => {
     ENV: {
       NODE_ENV: process.env.NODE_ENV,
       user,
-      API_URL: process.env.API_URL
+      API_URL: process.env.API_URL,
+      LOCAL_API_URL: process.env.LOCAL_API_URL
     },
   });
 };
@@ -77,19 +78,19 @@ export default function App() {
         <Meta />
         <Links />
       </head>
-      <body>
-        <UserProvider initialUser={data.ENV.user}>
-          <Layout />
-          <ScrollRestoration />
-          <Scripts />
-          {!hasGivenConsent && <CookieConsent />}
-          {/*  <LiveReload />*/}
-        </UserProvider>
+      <body suppressHydrationWarning={true}>
         <script
           dangerouslySetInnerHTML={{
             __html: `window.ENV = ${JSON.stringify(data.ENV)}`,
           }}
         />
+        <UserProvider initialUser={data.ENV.user}>
+          <Layout />
+          {!hasGivenConsent && <CookieConsent />}
+        </UserProvider>
+        <ScrollRestoration />
+        <Scripts />
+        <LiveReload />
       </body>
     </html>
   );

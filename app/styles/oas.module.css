@@ -1,0 +1,210 @@
+.container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.title {
+  font-size: 2rem;
+  font-weight: bold;
+  margin-bottom: 1.5rem;
+  color: #1a1a1a;
+}
+
+.intro-text {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  color: #4a5568;
+  margin-bottom: 2rem;
+}
+
+.instructions-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #2d3748;
+}
+
+.instructions {
+  background-color: #f7fafc;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  margin-bottom: 2rem;
+  line-height: 1.8;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  color: #2d3748;
+}
+
+.select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  background-color: white;
+  font-size: 1rem;
+  color: #4a5568;
+  margin-bottom: 1rem;
+}
+
+.data-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  font-family: monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.button-group {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+.button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.button.primary {
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+}
+
+.button.primary:hover {
+  background-color: #2563eb;
+}
+
+.button.secondary {
+  background-color: #e2e8f0;
+  color: #4a5568;
+  border: none;
+}
+
+.button.secondary:hover {
+  background-color: #cbd5e1;
+}
+
+.button.cancel {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+}
+
+.button.cancel:hover {
+  background-color: #dc2626;
+}
+
+.example-button {
+  background-color: #e2e8f0;
+  color: #4a5568;
+  border: none;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  margin-left: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.example-button:hover {
+  background-color: #cbd5e1;
+}
+
+.error-message {
+  background-color: #fee2e2;
+  color: #dc2626;
+  padding: 1rem;
+  border-radius: 0.375rem;
+  margin-bottom: 1rem;
+}
+
+.success-message {
+  background-color: #dcfce7;
+  color: #16a34a;
+  padding: 1rem;
+  border-radius: 0.375rem;
+  margin-bottom: 1rem;
+}
+
+.agreement-details {
+  background-color: white;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  margin-top: 2rem;
+}
+
+.agreement-content {
+  margin-top: 1rem;
+}
+
+.agreement-json {
+  background-color: #f8fafc;
+  padding: 1rem;
+  border-radius: 0.375rem;
+  overflow: auto;
+  font-size: 0.875rem;
+  font-family: monospace;
+  margin-top: 1rem;
+}
+
+.popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.example-popup {
+  background-color: white;
+  border-radius: 0.5rem;
+  padding: 2rem;
+  max-width: 90%;
+  width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.example-content {
+  margin-bottom: 1.5rem;
+}
+
+.example-code {
+  background-color: #f8fafc;
+  padding: 1rem;
+  border-radius: 0.375rem;
+  overflow: auto;
+  font-size: 0.875rem;
+  font-family: monospace;
+  margin: 1rem 0;
+}
+
+.example-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}

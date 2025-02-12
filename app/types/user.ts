@@ -1,12 +1,15 @@
 export type User = {
   email: string;
   name: string;
-  publicKeyXlm: string;
+  publicKeyXlmTestnet: string;
+  publicKeyXlmMainnet: string;
+  contractId?: string;
   preferredCurrency?: string;
   isAuthorized: boolean;
+  isPhoneVerified?: boolean;
   image?: string;
   preferredNetwork?: string;
-  token?: string;
+  token: string;
   preferences?: {
     hideBalances: boolean;
     currency: string;

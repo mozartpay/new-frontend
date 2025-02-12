@@ -363,6 +363,6 @@ impl IncrementContract {
 
 export const loader = async ({ request }: { request: Request }) => {
   return json({
-    apiUrl: process.env.LOCAL_API_URL || 'http://localhost:8000'
+    apiUrl: process.env.API_URL || 'http://localhost:8000'
   });
 };

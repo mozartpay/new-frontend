@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { json, LoaderFunction, redirect } from '@remix-run/node';
+import { json, LoaderFunction, ActionFunction, redirect } from '@remix-run/node';
 import { useLoaderData } from '@remix-run/react';
 import axios from 'axios';
 import { z } from 'zod';
@@ -37,7 +37,6 @@ const SwapFormSchema = z.object({
   destinationAsset: AssetSchema,
   amount: z.string().regex(/^\d*\.?\d{0,7}$/),
   memo: z.string().max(28).optional(),
-  network: z.enum(['mainnet', 'testnet']).default('testnet'),
   slippageTolerance: z.number().min(0.01).max(100).default(2)
 });
 
@@ -52,7 +51,6 @@ interface SwapFormData {
   };
   amount: string;
   memo: string;
-  network: 'testnet' | 'mainnet';
   slippageTolerance: number;
 }
 
@@ -74,19 +72,50 @@ export const loader: LoaderFunction = async ({ request }) => {
   if (!user) {
     return redirect("/signin");
   }
-  return json({ user, ENV: { LOCAL_API_URL: process.env.LOCAL_API_URL } });
+  return json({ user, ENV: { API_URL: process.env.API_URL } });
+};
+
+export const action: ActionFunction = async ({ request }) => {
+  try {
+    const formData = await request.formData();
+    const rawData = Object.fromEntries(formData);
+
+    // Parse and validate the form data
+    const validatedData = SwapFormSchema.parse({
+      sourceAsset: {
+        code: rawData.sourceAssetCode,
+        issuer: rawData.sourceAssetIssuer || undefined
+      },
+      destinationAsset: {
+        code: rawData.destinationAssetCode,
+        issuer: rawData.destinationAssetIssuer || undefined
+      },
+      amount: rawData.amount,
+      memo: rawData.memo,
+      slippageTolerance: parseFloat(rawData.slippageTolerance as string)
+    });
+
+    // Here you would typically make an API call to your backend to process the swap
+    // For now, we'll just return the validated data
+    return json({ success: true, data: validatedData });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return json({ success: false, errors: error.errors }, { status: 400 });
+    }
+    return json({ success: false, error: 'Failed to process swap request' }, { status: 500 });
+  }
 };
 
 export default function Swap() {
-  const { user, ENV } = useLoaderData<{ user: any; ENV: { LOCAL_API_URL: string } }>();
+  const { user, ENV } = useLoaderData<{ user: any; ENV: { API_URL: string } }>();
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<React.ReactNode | null>(null);
   const [success, setSuccess] = useState<React.ReactNode | null>(null);
   const [estimatedAmount, setEstimatedAmount] = useState('');
   const [exchangeRate, setExchangeRate] = useState<string | null>(null);
   const [currencyRates, setCurrencyRates] = useState<{ [key: string]: number }>({});
-  const apiUrl = ENV.LOCAL_API_URL || 'http://localhost:8000/api';
+  const apiUrl = ENV.API_URL || 'http://localhost:8000/api';
   const token = user?.token;
 
   const [formData, setFormData] = useState<SwapFormData>({
@@ -100,11 +129,10 @@ export default function Swap() {
     },
     amount: '',
     memo: '',
-    network: 'testnet',
     slippageTolerance: 2
   });
 
-  // Fetch balances
+  // Fetch balances when network changes
   useEffect(() => {
     if (user?.email && token) {
       fetchBalances();
@@ -118,7 +146,7 @@ export default function Swap() {
         {
           params: {
             email: user.email,
-            network: formData.network
+            network: user.preferences?.network || 'mainnet'
           },
           headers: {
             'Authorization': `Bearer ${token}`
@@ -200,8 +228,8 @@ export default function Swap() {
           issuer: ASSETS[formData.destinationAsset.code as keyof typeof ASSETS].issuer
         },
         amount: formattedAmount,
-        network: 'testnet',
-        sendExact: true
+        sendExact: true,
+        network: user.preferences?.network || 'mainnet'
       });
 
       const requestBody = createEstimateRequestBody();
@@ -343,7 +371,7 @@ export default function Swap() {
         },
         amount: formattedAmount,
         memo: formData.memo,
-        network: formData.network,
+        network: user.preferences?.network || 'mainnet',
         slippageTolerance: formData.slippageTolerance
       };
 
@@ -362,8 +390,7 @@ export default function Swap() {
       console.log('Swap response:', response.data);
 
       if (response.data.result?.hash) {
-        const network = formData.network || 'testnet';
-        const explorerUrl = `https://stellar.expert/explorer/${network}/tx/${response.data.result.hash}`;
+        const explorerUrl = `https://stellar.expert/explorer/public/tx/${response.data.result.hash}`;
         console.log('Setting success message with hash:', response.data.result.hash);
         console.log('Explorer URL:', explorerUrl);
         
@@ -531,23 +558,6 @@ export default function Swap() {
         </div>
 
         <div className="additional-options">
-          <div className="network-selection">
-            <label>Network:</label>
-            <select
-              name="network"
-              value={formData.network}
-              onChange={(e) => {
-                setFormData(prev => ({
-                  ...prev,
-                  network: e.target.value as 'testnet' | 'mainnet'
-                }));
-              }}
-            >
-              <option value="testnet">Testnet</option>
-              <option value="mainnet">Mainnet</option>
-            </select>
-          </div>
-
           <div className="slippage-tolerance">
             <label>Slippage Tolerance (%):</label>
             <input
@@ -570,7 +580,7 @@ export default function Swap() {
           </div>
 
           <div className="memo-field">
-            <label>Memo (optional):</label>
+            <label>Memo (Optional):</label>
             <input
               type="text"
               name="memo"
@@ -581,8 +591,8 @@ export default function Swap() {
                   memo: e.target.value
                 }));
               }}
-              placeholder="Enter memo"
               maxLength={28}
+              placeholder="Enter memo"
             />
           </div>
         </div>
