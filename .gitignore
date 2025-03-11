@@ -4,8 +4,13 @@ node_modules
 /public/build
 /build
 .env
+.env.production
+.env.keys
 
 # Local Netlify folder
 .netlify
 .DS_Store
 
+
+# windsurf rules
+.windsurfrules

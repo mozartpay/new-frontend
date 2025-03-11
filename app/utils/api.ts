@@ -7,6 +7,11 @@ interface NetworkConfig {
   horizonUrl: string;
 }
 
+interface StellarBalance {
+  asset_code: string;
+  balance: string;
+}
+
 // Declare the ENV property on the Window interface
 declare global {
   interface Window {
@@ -16,122 +21,177 @@ declare global {
   }
 }
 
-// Get environment variables from window.ENV on the client side
+// Get environment variables from window.ENV on the client side or process.env on the server
 function getEnvVar(name: string): string {
-  if (typeof window !== 'undefined' && window.ENV && window.ENV[name]) {
-    return window.ENV[name];
+  if (typeof window !== 'undefined') {
+    // Client-side
+    return window.ENV?.[name] || '';
   }
-  return process.env[name] || '';
+  // Server-side
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env[name] || '';
+  }
+  return '';
 }
 
 const NETWORK_CONFIGS: Record<Network, NetworkConfig> = {
   testnet: {
-    apiUrl: getEnvVar('API_URL'),
+    apiUrl: 'https://mozart-api-21ea5fd801a8.herokuapp.com/api',
     horizonUrl: 'https://horizon-testnet.stellar.org',
   },
   mainnet: {
-    apiUrl: getEnvVar('API_URL'),
+    apiUrl: 'https://mozart-api-21ea5fd801a8.herokuapp.com/api',
     horizonUrl: 'https://horizon.stellar.org',
   },
 };
 
-function getValidApiUrl(apiUrl?: string, network: Network = 'testnet'): string {
-  if (apiUrl) return apiUrl;
-  const config = NETWORK_CONFIGS[network];
-  
-  if (!config.apiUrl) {
-    throw new Error(`API URL not configured for network: ${network}. Please check your environment variables.`);
+function getValidApiUrl(network: Network, apiUrl?: string): string {
+  // First try the provided apiUrl if it's a valid URL
+  if (apiUrl && (apiUrl.startsWith('http://') || apiUrl.startsWith('https://'))) {
+    return apiUrl;
   }
   
-  return config.apiUrl;
+  // Then try the network-specific config
+  const networkConfig = NETWORK_CONFIGS[network];
+  if (networkConfig?.apiUrl) {
+    return networkConfig.apiUrl;
+  }
+
+  // Finally try the environment variable
+  const envApiUrl = getEnvVar('API_URL');
+  if (envApiUrl && (envApiUrl.startsWith('http://') || envApiUrl.startsWith('https://'))) {
+    return envApiUrl;
+  }
+
+  // Fall back to default API URL
+  return 'https://mozart-api-21ea5fd801a8.herokuapp.com/api';
 }
 
-export async function getBalances(email: string, token: string, apiUrl?: string, network: Network = 'testnet') {
+export async function getBalances(email: string, token: string, network: Network, apiUrl?: string) {
   try {
-    const baseUrl = getValidApiUrl(apiUrl, network);
+    const baseUrl = getValidApiUrl(network, apiUrl);
+    console.log('API URL Config:', {
+      baseUrl,
+      apiUrl,
+      network,
+      fullUrl: `${baseUrl}/user/balance`
+    });
+
+    const encodedEmail = encodeURIComponent(email);
     const response = await axios.get(
-      `${baseUrl}/balance`,
+      `${baseUrl}/user/balance/${encodedEmail}`,
       {
-        params: { email, network },
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        params: {
+          network
+        },
+        withCredentials: true
       }
     );
     
+    console.log('Balance Response:', {
+      status: response.status,
+      data: JSON.stringify(response.data, null, 2),
+      url: response.config.url,
+      params: response.config.params
+    });
+
     // Ensure we always return an array of balances
     const balances = response.data?.balances || [];
     return { balances };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching balances:', error);
-    throw error;
+    if (error.response?.status === 404) {
+      return { balances: [] }; // Return empty balances for new accounts
+    }
+    throw new Error(error.response?.data?.error || 'Failed to fetch balances');
   }
 }
 
-export async function getStellarAccount(email: string, token: string, apiUrl?: string, network: Network = 'testnet'): Promise<{
-  publicKey: string;
-  balance: string;
-  hasUSDCTrustline: boolean;
-  hasEURCTrustline: boolean;
-  preferredNetwork: Network;
-} | null> {
+export async function getStellarAccount(email: string, token: string, network: Network, apiUrl?: string) {
   try {
-    const baseUrl = getValidApiUrl(apiUrl, network);
+    const baseUrl = getValidApiUrl(network, apiUrl);
+    const encodedEmail = encodeURIComponent(email);
     const response = await axios.get(
-      `${baseUrl}/balance`,
+      `${baseUrl}/user/balance/${encodedEmail}`,
       {
-        params: { email, network },
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        params: {
+          network
+        },
+        withCredentials: true
       }
     );
-    
-    if (!response.data) {
-      return null;
-    }
 
-    const { balances, publicKey } = response.data;
-    if (!publicKey) {
-      return null;
-    }
+    // If we get balances, it means the account exists
+    const balances = response.data?.balances || [];
+    if (balances.length === 0) return null;
 
-    const xlmBalance = balances?.find((b: any) => b.asset_type === 'native' || b.asset_code === 'XLM');
+    // Find XLM balance
+    const xlmBalance = balances.find((b: StellarBalance) => b.asset_code === 'XLM' || !b.asset_code)?.balance || '0';
+
+    // Check for trustlines
+    const hasUSDCTrustline = balances.some((b: StellarBalance) => b.asset_code === 'USDC');
+    const hasEURCTrustline = balances.some((b: StellarBalance) => b.asset_code === 'EURC');
+
+    // Get the public key from the response
+    const publicKey = response.data?.account || '';
 
     return {
       publicKey,
-      balance: xlmBalance?.balance || '0',
-      hasUSDCTrustline: balances?.some((b: any) => b.asset_code === 'USDC'),
-      hasEURCTrustline: balances?.some((b: any) => b.asset_code === 'EURC'),
+      balance: xlmBalance,
+      hasUSDCTrustline,
+      hasEURCTrustline,
       preferredNetwork: network
     };
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 400) {
-      return null;
-    }
+  } catch (error: any) {
     console.error('Error fetching Stellar account:', error);
-    throw error;
+    if (error.response?.status === 404) {
+      return null; // Return null for non-existent accounts
+    }
+    throw new Error(error.response?.data?.error || 'Failed to fetch account details');
   }
 }
 
-export async function createTrustline(email: string, currency: string, token: string, apiUrl?: string, network: string = 'testnet') {
+export async function createTrustline(
+  email: string,
+  currency: string,
+  token: string,
+  apiUrl: string,
+  network: Network = 'testnet'
+) {
   try {
-    const baseUrl = getValidApiUrl(apiUrl, network as Network);
+    console.log('API URL Config:', {
+      baseUrl: apiUrl,
+      apiUrl,
+      network,
+      fullUrl: `${apiUrl}/stellar/trustline` // Updated URL path
+    });
+
     const response = await axios.post(
-      `${baseUrl}/stellar/trustline`,
-      { email, currency, network },
+      `${apiUrl}/stellar/trustline`, // Changed from /user/trustline to /stellar/trustline
+      { 
+        email, 
+        currency,
+        network 
+      },
       {
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
           'Authorization': `Bearer ${token}`
         }
       }
     );
+
+    console.log('Trustline creation response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error creating trustline:', error);
@@ -139,11 +199,29 @@ export async function createTrustline(email: string, currency: string, token: st
   }
 }
 
-export async function createXLMAccount(email: string, token: string, apiUrl?: string, network: string = 'testnet') {
+export async function createXLMAccount(email: string, token: string, network: Network, apiUrl?: string) {
   try {
-    const baseUrl = getValidApiUrl(apiUrl, network as Network);
+    console.log('Creating XLM account with:', { email, network, apiUrl });
+    const baseUrl = getValidApiUrl(network, apiUrl);
+    console.log('Using API URL:', baseUrl);
+    
+    // Log token information to debug authorization issues
+    try {
+      const tokenParts = token.split('.');
+      if (tokenParts.length === 3) {
+        const payload = JSON.parse(atob(tokenParts[1]));
+        console.log('Token info:', {
+          exp: new Date(payload.exp * 1000).toISOString(),
+          iat: new Date(payload.iat * 1000).toISOString(),
+          isExpired: payload.exp * 1000 < Date.now()
+        });
+      }
+    } catch (e) {
+      console.error('Error parsing token:', e);
+    }
+    
     const response = await axios.post(
-      `${baseUrl}/xlm/`,
+      `${baseUrl}/xlm`,  // Keep the original endpoint
       { email, network, currency: 'XLM' },
       {
         headers: {
@@ -153,34 +231,77 @@ export async function createXLMAccount(email: string, token: string, apiUrl?: st
         }
       }
     );
+    
+    console.log('XLM account creation response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error creating XLM account:', error);
+    if (axios.isAxiosError(error)) {
+      console.error('Response:', error.response?.data);
+      console.error('Status:', error.response?.status);
+      console.error('Headers:', error.response?.headers);
+      
+      // Check if token is expired
+      if (error.response?.status === 401) {
+        console.error('Authentication failed. Token may be expired or invalid.');
+      }
+      
+      throw new Error(error.response?.data?.message || error.message);
+    }
     throw error;
   }
 }
 
-export async function requestCarbonSink(xlmAddress: string, carbonAmount: string, usdcAmount: string, email: string, token: string, apiUrl?: string) {
+export interface CarbonSinkResponse {
+  tx_xdr: string;
+  txrep?: string;
+  carbon_amount?: string;
+  usdc_amount?: string;
+  funder?: string;
+  recipient?: string;
+  vcs_project_id?: number;
+  success?: boolean;
+  error?: string;
+  details?: string;
+  hash?: string;  // Add back hash field since backend will submit and return it
+}
+
+export async function requestCarbonSink(
+  xlmAddress: string,
+  carbonAmount: string,
+  usdcAmount: string,
+  email: string,
+  token: string,
+  network: Network,
+  vcsProjectId: number,
+  paymentAsset: string,
+  recipient: string,
+  apiUrl?: string
+): Promise<CarbonSinkResponse> {
   try {
-    const baseUrl = getValidApiUrl(apiUrl, 'testnet');
+    const baseUrl = getValidApiUrl(network, apiUrl);
     console.log('Requesting carbon sink with params:', {
       email,
       funder: xlmAddress,
-      carbon_amount: carbonAmount,
-      usdc_amount: usdcAmount,
+      quote: {
+        usd_amount: usdcAmount,
+        total_carbon: carbonAmount
+      },
       baseUrl
     });
 
-    const response = await axios.post(
+    const response = await axios.post<CarbonSinkResponse>(
       `${baseUrl}/carbon/sink-carbon/xdr`,
       {
         email,
         funder: xlmAddress,
-        recipient: xlmAddress,
-        carbon_amount: carbonAmount,
-        usdc_amount: usdcAmount,
-        payment_asset: 'USDC',
-        vcs_project_id: 1360
+        recipient,
+        payment_asset: paymentAsset,
+        vcs_project_id: vcsProjectId,
+        quote: {
+          usd_amount: usdcAmount,
+          total_carbon: carbonAmount
+        }
       },
       { 
         headers: { 
@@ -190,9 +311,77 @@ export async function requestCarbonSink(xlmAddress: string, carbonAmount: string
         }
       }
     );
+    
+    console.log('Carbon sink response:', response.data);
+    
+    if (!response.data.tx_xdr) {
+      throw new Error('XDR is missing from the carbon sink response');
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Error requesting carbon sink:', error);
+    throw error;
+  }
+}
+
+export async function getUserProfile(email: string, token: string, network: Network, apiUrl?: string) {
+  try {
+    const baseUrl = getValidApiUrl(network, apiUrl);
+    const encodedEmail = encodeURIComponent(email);
+    const response = await axios.get(
+      `${baseUrl}/api/profile/${encodedEmail}`,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        params: {
+          network
+        },
+        withCredentials: true
+      }
+    );
+    
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching user profile:', error);
+    throw error;
+  }
+}
+
+export async function submitTransaction(
+  xdr: string,
+  email: string,
+  token: string,
+  network: Network,
+  apiUrl?: string
+): Promise<{ hash: string }> {
+  try {
+    const baseUrl = getValidApiUrl(network, apiUrl);
+    const response = await axios.post(
+      `${baseUrl}/transactions/submit`,
+      {
+        email,
+        xdr
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      }
+    );
+
+    if (!response.data?.hash) {
+      throw new Error('Transaction hash missing from response');
+    }
+
+    return { hash: response.data.hash };
+  } catch (error) {
+    console.error('Error submitting transaction:', error);
     throw error;
   }
 }

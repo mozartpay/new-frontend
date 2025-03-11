@@ -25,15 +25,34 @@ export const links: LinksFunction = () => [
 
 // Global loader
 export const loader: LoaderFunction = async ({ request }) => {
-  const user = await getUserFromSession(request);
-  return json({
-    ENV: {
-      NODE_ENV: process.env.NODE_ENV,
-      user,
-      API_URL: process.env.API_URL,
-      LOCAL_API_URL: process.env.LOCAL_API_URL
-    },
-  });
+  try {
+    const user = await getUserFromSession(request);
+    const apiUrl = process.env.API_URL;
+    const nodeEnv = process.env.NODE_ENV;
+
+    if (!apiUrl) {
+      console.error("API_URL is not configured");
+      throw new Error("API_URL is not configured");
+    }
+
+    return json({
+      ENV: {
+        NODE_ENV: nodeEnv,
+        user,
+        API_URL: apiUrl,
+      },
+    });
+  } catch (error) {
+    console.error('Root loader error:', error);
+    // Return a valid response even in case of error
+    return json({
+      ENV: {
+        NODE_ENV: process.env.NODE_ENV,
+        user: null,
+        API_URL: process.env.API_URL,
+      },
+    });
+  }
 };
 
 function Layout() {
@@ -78,7 +97,7 @@ export default function App() {
         <Meta />
         <Links />
       </head>
-      <body suppressHydrationWarning={true}>
+      <body>
         <script
           dangerouslySetInnerHTML={{
             __html: `window.ENV = ${JSON.stringify(data.ENV)}`,
@@ -90,7 +109,7 @@ export default function App() {
         </UserProvider>
         <ScrollRestoration />
         <Scripts />
-        <LiveReload />
+      
       </body>
     </html>
   );

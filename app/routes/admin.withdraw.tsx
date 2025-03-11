@@ -3,7 +3,7 @@ import { useNavigate, useLoaderData } from '@remix-run/react';
 import { json, LoaderFunction, redirect } from '@remix-run/node';
 import axios from 'axios';
 import { getUserFromSession } from '~/sessions/index';
-import { requestCarbonSink } from '~/utils/api';
+import { requestCarbonSink, getBalances, getStellarAccount, Network, submitTransaction } from '~/utils/api';
 import { useUser } from '~/context/UserContext';
 import { User } from '~/types/user';
 import { motion } from 'framer-motion';
@@ -23,11 +23,15 @@ interface Balance {
 interface CarbonQuoteResponse {
   success: boolean;
   quote: {
-    usd_amount: string;
+    carbonAmount: string;
+    usdcAmount: string;
     total_carbon: string;
+    usd_amount: string;
   };
   originalAmount: number;
-  carbonOffsetAmount: number;
+  calculatedAmount: number;
+  adjustedAmount?: number;
+  note?: string;
 }
 
 interface WithdrawalData {
@@ -43,6 +47,14 @@ interface WithdrawalData {
   };
 }
 
+interface StellarAccountInfo {
+  publicKey: string;
+  balance: string;
+  hasUSDCTrustline: boolean;
+  hasEURCTrustline: boolean;
+  preferredNetwork: 'testnet' | 'mainnet';
+}
+
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
 
@@ -51,63 +63,34 @@ export const loader: LoaderFunction = async ({ request }) => {
   }
 
   try {
-    if (!user.email || !user.isAuthorized) {
-      return redirect("/signin");
-    }
-    // Use default API URL if environment variable is not set
-    const apiUrl = process.env.API_URL || 'http://localhost:8000/api';
-    return json({ user, apiUrl, token: user.token });
+    const response = await getBalances(user.email, user.token, 'testnet' as Network, 'testnet');
+    return json({
+      user,
+      apiUrl: process.env.API_URL,
+      token: user.token,
+      balances: response.balances || []
+    });
   } catch (error) {
-    console.error("Error processing user data:", error);
-    return redirect("/signin");
+    console.error('Error in loader:', error);
+    return json({
+      user,
+      apiUrl: process.env.API_URL,
+      token: user.token,
+      balances: []
+    });
   }
 };
 
-async function getCarbonQuote(amount: number): Promise<CarbonQuoteResponse> {
-  try {
-    // Calculate 1% of the amount for carbon offset
-    const carbonAmount = amount * 0.01;
-    
-    const response = await axios.post('http://localhost:8000/api/carbon/quote', { 
-      usdAmount: carbonAmount 
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching carbon quote:', error);
-    throw new Error('Failed to fetch carbon quote');
-  }
-}
-
-async function getCarbonSinkXDR(data: { carbonAmount: number }): Promise<any> {
-  try {
-    const response = await axios.post('http://localhost:8000/api/carbon/sink-xdr', data);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching carbon sink XDR:', error);
-    throw new Error('Failed to fetch carbon sink XDR');
-  }
-}
-
-async function getBalances(email: string, token: string, apiUrl: string): Promise<any> {
-  try {
-    const response = await axios.get(`${apiUrl}/balance?email=${encodeURIComponent(email)}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      }
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching balances:', error);
-    throw new Error('Failed to fetch balances');
-  }
-}
-
 export default function AdminWithdraw() {
-  const { user: loaderUser, apiUrl, token } = useLoaderData<{ user: any, apiUrl: string, token: string }>();
+  const { user: loaderUser, apiUrl, token, balances: initialBalances } = useLoaderData<{ 
+    user: User, 
+    apiUrl: string, 
+    token: string, 
+    balances: Balance[] 
+  }>();
   const [amount, setAmount] = useState<string>('');
   const [currency, setCurrency] = useState<string>('');
-  const [balances, setBalances] = useState<Balance[]>([]);
+  const [balances, setBalances] = useState<Balance[]>(initialBalances || []);
   const [xlmAddress, setXlmAddress] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,12 +100,16 @@ export default function AdminWithdraw() {
   const [carbonCreditsEnabled, setCarbonCreditsEnabled] = useState<boolean>(false);
   const [showCarbonCreditsOption, setShowCarbonCreditsOption] = useState<boolean>(false);
   const [explorerUrls, setExplorerUrls] = useState<string[]>([]);
-  const [network, setNetwork] = useState<'testnet' | 'mainnet'>(loaderUser?.preferredNetwork || 'testnet');
+  const [network, setNetwork] = useState<'testnet' | 'mainnet'>(
+    (loaderUser?.preferredNetwork as 'testnet' | 'mainnet') || 'testnet'
+  );
+  const [stellarAccount, setStellarAccount] = useState<StellarAccountInfo | null>(null);
   const navigate = useNavigate();
   const { user, setUser } = useUser();
+  const [carbonQuote, setCarbonQuote] = useState<CarbonQuoteResponse | null>(null);
 
   // Set default API URL if not provided
-  const baseApiUrl = apiUrl || 'http://localhost:8000/api';
+  const baseApiUrl = apiUrl;
 
   useEffect(() => {
     console.log('Component mounted with:', {
@@ -136,29 +123,23 @@ export default function AdminWithdraw() {
     if (!loaderUser) {
       navigate('/signin');
     } else if (!user) {
-      setUser(loaderUser);
+      setUser({
+        ...loaderUser,
+        isPhoneVerified: loaderUser.isPhoneVerified ?? false,
+        preferences: loaderUser.preferences ?? {
+          hideBalances: false,
+          currency: 'USD',
+          network: 'testnet'
+        }
+      });
     }
   }, [loaderUser, user, setUser, navigate]);
 
   useEffect(() => {
     if (user && user.email) {
-      fetchBalances();
+      // fetchBalances();
     }
   }, [user]);
-
-  const fetchBalances = async () => {
-    try {
-      const balancesData = await getBalances(loaderUser.email, token, baseApiUrl);
-      setBalances(balancesData.balances || []);
-    } catch (error) {
-      console.error('Error fetching balances:', error);
-      setError('Failed to fetch balances. Please try again.');
-    }
-  };
-
-  useEffect(() => {
-    fetchBalances();
-  }, [loaderUser.email, token, baseApiUrl]);
 
   const handleAmountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -167,13 +148,42 @@ export default function AdminWithdraw() {
     setShowCarbonCreditsOption(Number(value) >= 155);
   };
 
-  const handleCurrencyChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleCurrencyChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
     const value = event.target.value;
     console.log('Currency changed:', value);
     setCurrency(value);
-    if (value !== 'USDC') {
+    setError(null);
+    
+    // Reset carbon credits if not USD/USDC
+    if (value !== 'USDC' && value !== 'USD') {
       setCarbonCreditsEnabled(false);
       setShowCarbonCreditsOption(false);
+    }
+
+    // Check for USDC trustline if USD is selected
+    if (value === 'USD' || value === 'USDC') {
+      try {
+        setLoading(true);
+        const accountInfo = await getStellarAccount(
+          loaderUser.email,
+          token,
+          network as Network,
+          apiUrl
+        );
+        
+        setStellarAccount(accountInfo);
+        
+        if (!accountInfo?.hasUSDCTrustline) {
+          setError('You need to add a USDC trustline before withdrawing in USD. Please visit the Add Assets page to set this up.');
+          setCurrency('');
+        }
+      } catch (err) {
+        console.error('Error checking USDC trustline:', err);
+        setError('Failed to verify USDC trustline status. Please try again.');
+        setCurrency('');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -253,14 +263,10 @@ export default function AdminWithdraw() {
         
         console.log('Requesting carbon quote for amount:', amountNum);
         try {
-          // Send the full amount to calculate 1% on the backend
           carbonQuote = await axios({
             method: 'post',
             url: `${baseApiUrl}/carbon/quote`,
-            data: { 
-              usdAmount: amountNum,
-              email: loaderUser.email 
-            },
+            data: { usdAmount: amountNum },
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
@@ -268,7 +274,19 @@ export default function AdminWithdraw() {
             }
           });
           console.log('Carbon quote response:', JSON.stringify(carbonQuote.data, null, 2));
-          carbonQuote = carbonQuote.data; // Store just the data
+          
+          // Update UI with minimum amount message if present
+          if (carbonQuote.data.note) {
+            setSuccess(carbonQuote.data.note);
+          }
+          
+          carbonQuote = carbonQuote.data;
+          carbonQuote.calculatedAmount = parseFloat(carbonQuote.calculatedAmount);
+          if (carbonQuote.adjustedAmount) {
+            carbonQuote.adjustedAmount = parseFloat(carbonQuote.adjustedAmount);
+          }
+          carbonQuote.originalAmount = parseFloat(carbonQuote.originalAmount);
+          setCarbonQuote(carbonQuote);
         } catch (error) {
           console.error('Error getting carbon quote:', error);
           throw new Error('Failed to get carbon credits quote: ' + (error as Error).message);
@@ -281,22 +299,26 @@ export default function AdminWithdraw() {
 
         console.log('Requesting carbon sink with address:', xlmAddress);
         try {
-          // Extract and format the USDC amount from the quote
-          const usdcAmount = carbonQuote.quote.usd_amount;
-          console.log('Using USDC amount:', usdcAmount);
-          console.log('User data:', { loaderUser });
-          
-          if (!loaderUser.email) {
-            throw new Error('User email is required for carbon sink request');
+          // Get the appropriate public key based on network
+          const userPublicKey = network.toLowerCase() === 'testnet' 
+            ? loaderUser.publicKeyXlmTestnet 
+            : loaderUser.publicKeyXlmMainnet;
+
+          if (!userPublicKey) {
+            throw new Error(`No public key found for ${network} network`);
           }
-          
+
           carbonSinkData = await requestCarbonSink(
-            xlmAddress,
-            carbonQuote.quote.total_carbon,
-            usdcAmount,
+            userPublicKey,
+            carbonQuote.quote.total_carbon,  // Changed from carbonAmount
+            carbonQuote.quote.usd_amount,    // Changed from usdcAmount
             loaderUser.email,
             token,
-            baseApiUrl
+            network as Network,
+            1360,  // vcsProjectId as number
+            'USDC',
+            userPublicKey,  // Using the same key for recipient
+            baseApiUrl     // optional apiUrl parameter
           );
           console.log('Carbon sink response:', carbonSinkData);
         } catch (error) {
@@ -355,25 +377,33 @@ export default function AdminWithdraw() {
       
       setExplorerUrls(newExplorerUrls);
 
-      // Second transaction: Submit the carbon sink XDR if carbon credits are enabled
+      // Second transaction: Process carbon sink response if carbon credits are enabled
       if (carbonQuote && carbonSinkData) {
         try {
-          console.log('Carbon sink XDR transaction handled by backend');
+          console.log('Processing carbon sink response:', carbonSinkData);
           
-          if (!carbonSinkData.xdr) {
+          if (!carbonSinkData.tx_xdr) {
             throw new Error('Carbon sink XDR is missing from the response');
+          }
+
+          // Add the carbon sink transaction hash to explorer URLs if available
+          if (carbonSinkData.hash) {
+            const networkPath = network === 'mainnet' ? 'public' : 'testnet';
+            newExplorerUrls.push(`https://stellar.expert/explorer/${networkPath}/tx/${carbonSinkData.hash}`);
+            setExplorerUrls(newExplorerUrls);
           }
 
         } catch (error) {
           console.error('Error processing carbon sink transaction:', error);
-          setError('Failed to process carbon sink transaction');
+          setError('Failed to process carbon sink transaction: ' + (error as Error).message);
+          return;
         }
       }
 
       setSuccess('Withdrawal request processed successfully');
       setIsModalOpen(false);
       setIsConfirmationOpen(true);
-      fetchBalances();
+      // fetchBalances();
     } catch (error: any) {
       console.error('Error creating withdrawal request:', error);
       const errorMessage = error.response?.data?.message || 
@@ -393,7 +423,7 @@ export default function AdminWithdraw() {
 
   const handleConfirmationClose = () => {
     setIsConfirmationOpen(false);
-    fetchBalances();
+    // fetchBalances();
   };
 
   if (!loaderUser) {
@@ -428,14 +458,25 @@ export default function AdminWithdraw() {
           value={currency}
           onChange={handleCurrencyChange}
           className="w-full p-2 border border-gray-300 rounded-md"
+          disabled={loading}
         >
           <option value="">Select currency</option>
           {balances.map((balance) => (
             <option key={balance.asset_code} value={balance.asset_code}>
-              {balance.asset_code}
+              {balance.asset_code} ({balance.balance})
             </option>
           ))}
         </select>
+        {loading && (
+          <p className="mt-2 text-sm text-gray-500">
+            Verifying asset requirements...
+          </p>
+        )}
+        {error && (
+          <p className="mt-2 text-sm text-red-600">
+            {error}
+          </p>
+        )}
       </div>
 
       {currency && (
@@ -451,24 +492,50 @@ export default function AdminWithdraw() {
         onChange={handleAmountChange}
       />
 
-      {showCarbonCreditsOption && currency === 'USDC' && (
-        <div className="carbon-credits-option">
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={carbonCreditsEnabled}
-              onChange={handleCarbonCreditsChange}
-              className="form-checkbox"
-            />
-            <span>
-              Offset 1% of this transaction with carbon credits (${(Number(amount) * 0.01).toFixed(2)} USDC)
-            </span>
-          </label>
-          {carbonCreditsEnabled && (
-            <p className="text-sm text-gray-600 mt-1 ml-6">
-              💚 Your contribution will help offset carbon emissions through verified carbon credits
-            </p>
-          )}
+      {showCarbonCreditsOption && (
+        <div className="mb-4">
+          <div className="flex items-start">
+            <div className="flex items-center h-5">
+              <input
+                id="carbonCredits"
+                type="checkbox"
+                checked={carbonCreditsEnabled}
+                onChange={handleCarbonCreditsChange}
+                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              />
+            </div>
+            <div className="ml-3 text-sm">
+              <label htmlFor="carbonCredits" className="font-medium text-gray-700">
+                Enable Carbon Offset (1% of withdrawal amount)
+              </label>
+              <p className="text-gray-500">
+                Your contribution will help offset carbon emissions through verified carbon credits
+              </p>
+              {carbonCreditsEnabled && carbonQuote && (
+                <div className="mt-2 p-3 bg-green-50 rounded-md">
+                  <h4 className="font-medium text-green-800">Carbon Offset Details</h4>
+                  <div className="mt-2 space-y-1 text-sm">
+                    <p className="text-green-700">
+                      Original Amount: ${carbonQuote.originalAmount.toFixed(2)} USD
+                    </p>
+                    <p className="text-green-700">
+                      Carbon Offset: ${carbonQuote.calculatedAmount.toFixed(2)} USD
+                    </p>
+                    {carbonQuote.adjustedAmount && (
+                      <p className="text-green-700">
+                        Adjusted Amount: ${carbonQuote.adjustedAmount.toFixed(2)} USD
+                      </p>
+                    )}
+                    {carbonQuote.note && (
+                      <p className="text-yellow-600 mt-2">
+                        Note: {carbonQuote.note}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -528,20 +595,67 @@ export default function AdminWithdraw() {
       {isModalOpen && (
         <div className="modal">
           <div className="modal-content">
-            <h2>Enter Stellar Wallet Address</h2>
-            <input
-              type="text"
-              placeholder="Enter your Stellar address"
-              value={xlmAddress}
-              onChange={(e) => setXlmAddress(e.target.value)}
-            />
-            <button 
-              onClick={handleConfirmWithdraw} 
-              disabled={loading || !xlmAddress}
-            >
-              {loading ? 'Processing...' : 'Confirm Withdrawal'}
-            </button>
-            <button onClick={() => setIsModalOpen(false)}>Cancel</button>
+            <h2>Confirm Withdrawal</h2>
+            <div className="mb-4">
+              <p className="text-gray-600 mb-2">Amount: {amount} {currency}</p>
+              {carbonCreditsEnabled && carbonQuote && (
+                <div className="text-sm text-gray-500">
+                  <p>Carbon Offset: ${carbonQuote.calculatedAmount.toFixed(2)} USD</p>
+                  {carbonQuote.adjustedAmount && (
+                    <p>Adjusted Amount: ${carbonQuote.adjustedAmount.toFixed(2)} USD</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Recipient Stellar Address
+              </label>
+              <input
+                type="text"
+                placeholder="Enter the recipient's Stellar address"
+                value={xlmAddress}
+                onChange={(e) => {
+                  const address = e.target.value.trim();
+                  setXlmAddress(address);
+                  // Clear any previous errors
+                  setError(null);
+                  // Basic Stellar address validation
+                  try {
+                    if (address && !address.startsWith('G')) {
+                      setError('Invalid Stellar address. Address must start with G');
+                    }
+                  } catch (err) {
+                    setError('Invalid Stellar address format');
+                  }
+                }}
+                className={`w-full p-2 border rounded ${error ? 'border-red-500' : 'border-gray-300'}`}
+              />
+              {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+              <p className="text-sm text-gray-500 mt-1">
+                Make sure this is the correct address. Transactions cannot be reversed.
+              </p>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button 
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setXlmAddress('');
+                  setError(null);
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConfirmWithdraw} 
+                disabled={loading || !xlmAddress || !!error}
+                className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 
+                  ${(loading || !xlmAddress || !!error) ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {loading ? 'Processing...' : 'Confirm Withdrawal'}
+              </button>
+            </div>
           </div>
         </div>
       )}

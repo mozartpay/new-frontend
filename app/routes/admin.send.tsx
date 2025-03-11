@@ -111,12 +111,17 @@ export default function AdminSend() {
       setBalanceError('');
 
       const response = await axios.get(
-        `${apiUrl}/balance?email=${encodeURIComponent(user.email)}`, 
+        `${apiUrl}/api/user/balance/${encodeURIComponent(user.email)}`,
         { 
           headers: { 
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json' 
-          } 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          params: {
+            network: user.preferences?.network || 'testnet'
+          },
+          withCredentials: true
         }
       );
       

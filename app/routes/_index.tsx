@@ -1,7 +1,7 @@
-import { json, redirect, LoaderFunction } from "@remix-run/node";
-import { useLoaderData, Link } from "@remix-run/react";
+import { json } from "@remix-run/node";
+import { Link } from "@remix-run/react";
 import { useRef, useState, useEffect } from "react";
-import { motion, useAnimation } from "framer-motion";
+import { useAnimation } from "framer-motion";
 import Features from "~/components/landing/features";
 import Industries from "~/components/landing/industries";
 import Pricing from "~/components/landing/pricing";
@@ -9,23 +9,73 @@ import "../styles/global.css";
 import { decrypt } from '~/utils/encryption';
 import GradientSelector from '~/components/GradientSelector';
 import { WorldMap } from '../components/WorldMap'; 
-import { getUserFromSession } from "~/sessions";
+import { getBalances } from "~/utils/api";
+
+type BalanceObj = {
+  asset_code: string;
+  balance: string;
+};
 
 // Define the type for loader data
 type LoaderData = {
   user: any | null;
+  balances: BalanceObj[];
+  error: string | null;
+  isLoading: boolean;
 };
+
+import { LoaderFunction, redirect } from "@remix-run/node";
+import { getUserFromSession } from "~/sessions";
+import { useLoaderData } from "@remix-run/react";
+import { motion } from "framer-motion";
+// Remove the import for the non-existent CSS file
+// import "~/styles/landing.css";
 
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
   
-  // If user is logged in, redirect to admin
   if (user?.isAuthorized) {
     return redirect("/admin");
   }
-  
-  // Return null user for non-authenticated users
-  return json<LoaderData>({ user: null });
+
+  if (!user) {
+    return json<LoaderData>({ 
+      user: null,
+      balances: [],
+      error: null,
+      isLoading: false 
+    });
+  }
+
+  try {
+    let balances: BalanceObj[] = [];
+    let error: string | null = null;
+
+    if (user.email && user.token) {
+      try {
+        const response = await getBalances(user.email, user.token, user.preferences?.network || 'testnet', undefined);
+        balances = response?.balances || [];
+      } catch (balanceError: any) {
+        console.error("Error fetching balances:", balanceError.response?.data || balanceError.message);
+        error = balanceError.response?.data?.error || "Failed to fetch balances";
+      }
+    }
+    
+    return json<LoaderData>({ 
+      user,
+      balances,
+      error,
+      isLoading: false 
+    });
+  } catch (error) {
+    console.error("Error processing user data:", error);
+    return json<LoaderData>({ 
+      user: null,
+      balances: [],
+      error: "Failed to process user data",
+      isLoading: false 
+    });
+  }
 };
 
 function useIntersectionObserver(ref: React.RefObject<Element>, options: IntersectionObserverInit) {
@@ -73,8 +123,9 @@ export default function Home() {
   const videoControls = useAnimation();
 
   const [isClient, setIsClient] = useState(false);
-  const { user } = useLoaderData<LoaderData>();
+  const { user, balances = [], error, isLoading } = useLoaderData<LoaderData>();
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [selectedGradient, setSelectedGradient] = useState<Gradient | null>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -92,8 +143,6 @@ export default function Home() {
     buttonControls.start('visible');
     videoControls.start('visible');
   }, [titleControls, textControls, buttonControls, videoControls]);
-
-  const [selectedGradient, setSelectedGradient] = useState<Gradient | null>(null);
 
   const handleSelectGradient = (gradient: Gradient) => {
     setSelectedGradient(gradient);
@@ -129,6 +178,28 @@ export default function Home() {
             minWidth: '300px',
             margin: '0 auto'
           }}>
+            {user && (
+              <div style={{ marginBottom: '24px' }}>
+                {isLoading ? (
+                  <p>Loading balances...</p>
+                ) : error ? (
+                  <p style={{ color: 'red' }}>{error}</p>
+                ) : balances.length > 0 ? (
+                  <div>
+                    <h3>Your Balances</h3>
+                    {balances.map((balance, index) => (
+                      <div key={index} style={{ margin: '8px 0' }}>
+                        <span>{balance.asset_code || 'XLM'}: </span>
+                        <span>{balance.balance}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p>No balances found</p>
+                )}
+              </div>
+            )}
+
             <motion.div
               ref={titleRef}
               initial={{ opacity: 0, y: -50 }}
@@ -191,7 +262,7 @@ export default function Home() {
                   justifyContent: 'center'
                 }}
               >
-                <Link to="/signin">
+                <Link to={user ? "/admin" : "/signin"}>
                   <button
                     style={{
                       padding: '12px 24px',
@@ -207,7 +278,7 @@ export default function Home() {
                     onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#E53E3E')}
                     onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#F56565')}
                   >
-                    Get started
+                    {user ? 'Go to Dashboard' : 'Get Started'}
                   </button>
                 </Link>
                 <Link to="/contact">
@@ -275,5 +346,5 @@ export default function Home() {
         )}
       </div>
     </div>
-  );   
+  );
 }

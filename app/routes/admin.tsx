@@ -24,13 +24,23 @@ export const loader: LoaderFunction = async ({ request }) => {
   try {
     let balances: BalanceObj[] = [];
     let error: string | null = null;
+    let preferences = user.preferences || { 
+      hideBalances: true, 
+      currency: '', 
+      network: user.preferredNetwork || 'testnet' 
+    };
 
-    try {
-      const response = await getBalances(user.email, user.token, undefined, user.preferredNetwork);
-      balances = response.balances;
-    } catch (balanceError: any) {
-      console.error("Error fetching balances:", balanceError.response?.data || balanceError.message);
-      error = balanceError.response?.data?.error || "Failed to fetch balances";
+    if (user.email && user.token) {
+      try {
+        // Get the network from user preferences, defaulting to testnet
+        const network = (user.preferences?.network || user.preferredNetwork || 'testnet') as any;
+        const apiUrl = process.env.API_URL || '';
+        const response = await getBalances(user.email, user.token, network, apiUrl);
+        balances = response?.balances || [];
+      } catch (balanceError: any) {
+        console.error("Error fetching balances:", balanceError.response?.data || balanceError.message);
+        error = balanceError.response?.data?.error || "Failed to fetch balances";
+      }
     }
     
     // Ensure API_URL is defined before returning it
@@ -39,7 +49,17 @@ export const loader: LoaderFunction = async ({ request }) => {
       console.warn('API URL is not defined. Some features may not work correctly.');
     }
     
-    return json({ user, balances, apiUrl, token: user.token, error });
+    return json({ 
+      user: {
+        ...user,
+        preferences
+      },
+      balances, 
+      apiUrl, 
+      token: user.token, 
+      error,
+      isLoading: false 
+    });
   } catch (error) {
     console.error("Error processing user data:", error);
     return redirect("/signin");
@@ -47,11 +67,11 @@ export const loader: LoaderFunction = async ({ request }) => {
 };
 
 export default function Admin() {
-  const data = useLoaderData<{ user: any, balances: BalanceObj[], apiUrl: string, token: string, error: string | null }>();
+  const data = useLoaderData<{ user: any, balances: BalanceObj[], apiUrl: string, token: string, error: string | null, isLoading: boolean }>();
   const { user, setUser } = useUser();
   const navigate = useNavigate();
   const [balances, setBalances] = useState<BalanceObj[]>(data.balances);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(data.isLoading);
   const [error, setError] = useState<string | null>(data.error);
 
   const initialUser = {

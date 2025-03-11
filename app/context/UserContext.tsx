@@ -33,8 +33,23 @@ export const UserContext = createContext<UserContextType>({
   updatePreferences: () => {},
 });
 
-export const UserProvider: React.FC<{ children: ReactNode; initialUser: User }> = ({ children, initialUser }) => {
-  const [user, setUser] = useState<User | null>(initialUser);
+export const UserProvider: React.FC<{ children: ReactNode; initialUser: User | null }> = ({ children, initialUser }) => {
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      // Validate the initial user data
+      if (initialUser && 
+          typeof initialUser === 'object' && 
+          'email' in initialUser &&
+          'token' in initialUser) {
+        return initialUser;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error initializing user state:', error);
+      return null;
+    }
+  });
+
   const navigate = useNavigate();
 
   const logout = () => {
@@ -46,9 +61,35 @@ export const UserProvider: React.FC<{ children: ReactNode; initialUser: User }> 
   };
 
   const refreshUser = async () => {
-    // Add logic to refresh user data if needed
-    // For now just forcing a re-render with current user
-    setUser({ ...user! });
+    try {
+      if (!user?.token) {
+        throw new Error('No user token available');
+      }
+      
+      const apiUrl = window.ENV?.API_URL;
+      if (!apiUrl) {
+        throw new Error('API_URL not configured');
+      }
+
+      const response = await fetch(`${apiUrl}/profile`, {
+        headers: {
+          'Authorization': `Bearer ${user.token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to refresh user data');
+      }
+
+      const data = await response.json();
+      setUser(prevUser => ({
+        ...prevUser!,
+        ...data.user
+      }));
+    } catch (error) {
+      console.error('Error refreshing user:', error);
+      logout();
+    }
   };
 
   const updatePreferences = (preferences: Partial<User['preferences']>) => {

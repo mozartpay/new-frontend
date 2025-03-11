@@ -140,21 +140,38 @@ export default function Verify() {
   }, []);
 
   useEffect(() => {
-    if (fetcher.data?.success) {
+    let mounted = true;
+
+    if (fetcher.data?.success && mounted) {
       refreshUser().then(() => {
-        navigate('/admin');
+        if (mounted) {
+          navigate('/admin');
+        }
       });
     }
-    if (fetcher.data?.resendSuccess) {
-      setResendCooldown(60); // Start 60 second cooldown
+    if (fetcher.data?.resendSuccess && mounted) {
+      setResendCooldown(60);
     }
-  }, [fetcher.data?.success, fetcher.data?.resendSuccess]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [fetcher.data?.success, fetcher.data?.resendSuccess, navigate, refreshUser]);
 
   useEffect(() => {
+    let timeoutId: NodeJS.Timeout | undefined;
+
     if (resendCooldown > 0) {
-      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
-      return () => clearTimeout(timer);
+      timeoutId = setTimeout(() => {
+        setResendCooldown(prev => Math.max(0, prev - 1));
+      }, 1000);
     }
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   }, [resendCooldown]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {

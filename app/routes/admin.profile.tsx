@@ -7,6 +7,7 @@ import { decrypt, encrypt } from '~/utils/encryption';
 import { useUser } from '~/context/UserContext';
 import axios from 'axios';
 import "~/styles/admin.css";
+import styles from '~/styles/toggle-switch.css';
 
 // Import your images
 import banner from '~/assets/img/auth/banner.png';
@@ -99,15 +100,13 @@ export const action: ActionFunction = async ({ request }) => {
             preferredNetwork 
         }, {
             headers: {
-                "Set-Cookie": await commitSession(session),
-            },
+                "Set-Cookie": await commitSession(session)
+            }
         });
     } catch (error) {
         console.error("Action error:", error);
-        return json({ 
-            success: false, 
-            error: "Failed to update user preferences" 
-        }, { status: 400 });
+        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
+        return json({ success: false, error: errorMessage }, { status: 400 });
     }
 };
 
@@ -142,7 +141,7 @@ export default function AdminProfile() {
     
     if (user) {
       // Prioritize order: user preferences > stored preferences > default
-      const network = user.preferences?.network ?? parsedPreferences?.network ?? 'mainnet';
+      const network = user.preferences?.network ?? parsedPreferences?.network ?? 'testnet';
       
       // Ensure network preference is synchronized
       setUser(prevUser => prevUser ? {
@@ -375,47 +374,21 @@ export default function AdminProfile() {
         preferredNetwork: newNetwork
       }));
 
-      // Update backend
-      const response = await axios.post(`${apiUrl}/profile/preferredNetwork`, {
-        email: user.email,
-        preferredNetwork: newNetwork
-      }, {
-        headers: {
-          'Authorization': `Bearer ${user.token}`,
-          'Content-Type': 'application/json'
-        },
-        withCredentials: true
-      });
+      // Update backend and session through fetcher
+      fetcher.submit(
+        { preferredNetwork: newNetwork },
+        { method: "post" }
+      );
 
-      if (response.data?.status === 'success') {
-        const networkOption = NETWORK_OPTIONS.find(opt => opt.value === newNetwork);
-        setNetworkChangeMessage(`Network changed to ${networkOption?.label}`);
-        
-        // Update session
-        fetcher.submit(
-          { network: newNetwork, preferredNetwork: newNetwork } as ProfileFormData,
-          { method: "post" }
-        );
-      } else {
-        throw new Error(response.data?.message || 'Invalid response from server');
-      }
+      const networkOption = NETWORK_OPTIONS.find(opt => opt.value === newNetwork);
+      setNetworkChangeMessage(`Network changed to ${networkOption?.label}`);
+      
+      // Optionally reload the page after a short delay to ensure all states are updated
+      setTimeout(() => window.location.reload(), 1000);
+
     } catch (error) {
-      console.error('Error updating network:', error);
-      // Revert local state if there's an error
-      const storedPreferences = localStorage.getItem('userPreferences');
-      const parsedPreferences = storedPreferences ? JSON.parse(storedPreferences) : {};
-      const fallbackNetwork = parsedPreferences.network ?? 'mainnet';
-      
-      setUser(prevUser => prevUser ? {
-        ...prevUser,
-        preferences: {
-          ...prevUser.preferences,
-          network: fallbackNetwork
-        },
-        preferredNetwork: fallbackNetwork
-      } : null);
-      
-      setError(error instanceof Error ? error.message : 'Failed to update network. Please try again.');
+      console.error('Error updating network preference:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update network preference');
     }
   };
 
@@ -555,12 +528,10 @@ export default function AdminProfile() {
             }}>
               <input
                 type="checkbox"
-                checked={user?.preferences?.network === 'testnet'}
+                checked={user?.preferences?.network !== 'mainnet'}
                 onChange={(e) => {
                   const newNetwork = e.target.checked ? 'testnet' : 'mainnet';
                   handlePreferredNetworkChange({ target: { value: newNetwork } } as React.ChangeEvent<HTMLSelectElement>);
-                  // Force reload after network change
-                  setTimeout(() => window.location.reload(), 500);
                 }}
                 style={{
                   opacity: 0,
@@ -568,40 +539,17 @@ export default function AdminProfile() {
                   height: 0,
                 }}
               />
-              <span style={{
-                position: 'absolute',
-                cursor: 'pointer',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundColor: user?.preferences?.network === 'testnet' ? '#2196F3' : '#ccc',
-                transition: '.4s',
-                borderRadius: '34px',
-                ...(user?.preferences?.network === 'testnet' ? { '&::before': {
+              <span 
+                className={`toggle-switch ${user?.preferences?.network !== 'mainnet' ? 'active' : ''}`}
+                style={{
                   position: 'absolute',
-                  content: '""',
-                  height: '26px',
-                  width: '26px',
-                  left: '4px',
-                  bottom: '4px',
-                  backgroundColor: 'white',
-                  transition: '.4s',
-                  borderRadius: '50%',
-                  transform: 'translateX(26px)',
-                } as any } : { '&::before': {
-                  position: 'absolute',
-                  content: '""',
-                  height: '26px',
-                  width: '26px',
-                  left: '4px',
-                  bottom: '4px',
-                  backgroundColor: 'white',
-                  transition: '.4s',
-                  borderRadius: '50%',
-                  transform: 'translateX(0)',
-                } as any })
-              }}></span>
+                  cursor: 'pointer',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0
+                }}
+              />
             </label>
           </div>
           <AnimatePresence>

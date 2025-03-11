@@ -2,7 +2,7 @@ import { useOutletContext } from "@remix-run/react";
 import { motion } from 'framer-motion';
 import { useUser } from '~/context/UserContext';
 import { redirect, json, ActionFunctionArgs } from "@remix-run/node";
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSubmit } from "@remix-run/react";
 import { getUserFromSession, updateUserPreferences } from '~/sessions/index';
 import axios from 'axios';
@@ -10,7 +10,7 @@ import axios from 'axios';
 declare global {
   interface Window {
     ENV: {
-      API_URL: string;
+      [key: string]: string;
     }
   }
 }
@@ -92,65 +92,25 @@ export default function AdminIndex() {
   }, [user, navigate]);
 
   // Filter balances based on user's preferred currency
-  const filteredBalances = user?.preferences?.currency && Array.isArray(balances)
-    ? balances.filter(balance => balance.asset_code === user.preferences.currency)
-    : balances || [];
-
-  // Toggle balance visibility and update the server
-  const toggleBalanceVisibility = async (newState: boolean) => {
-    if (!user) {
-      console.error('User is not defined');
-      return;
-    }
-
-    try {
-      // Update local state first for immediate feedback
-      setHideBalances(newState);
-
-      // Update session
-      const formData = new FormData();
-      formData.append("hideBalances", String(newState));
-      submit(formData, { method: "post" });
-
-      // Update context
-      updatePreferences({ hideBalances: newState });
-
-      // Update backend
-      const localApiUrl = window.ENV.API_URL;
-      const response = await axios.post(`${localApiUrl}/profile/hideBalances`, {
-        email: user.email,
-        hideBalances: newState
-      }, {
-        headers: {
-          'Authorization': `Bearer ${user.token}`,
-          'Content-Type': 'application/json'
-        },
-        withCredentials: true // Important for cookie handling
-      });
-
-      // Store preference in localStorage as backup
-      localStorage.setItem('userPreferences', JSON.stringify({
-        ...JSON.parse(localStorage.getItem('userPreferences') || '{}'),
-        hideBalances: newState
-      }));
-
-    } catch (error) {
-      console.error('Error updating balance visibility:', error);
-      // Revert local state if there's an error
-      setHideBalances(!newState);
-      alert('An unexpected error occurred. Please try again later.');
-    }
-  };
+  const filteredBalances = useMemo(() => {
+    if (!Array.isArray(balances)) return [];
+    if (!user?.preferences?.currency) return balances;
+    return balances.filter(balance => balance.asset_code === user.preferences.currency);
+  }, [balances, user?.preferences?.currency]);
 
   // Initialize preferences from multiple sources
   useEffect(() => {
     const initializePreferences = async () => {
+      if (typeof window === 'undefined') return; // Guard against server-side execution
+      
       try {
         // Try to get preferences from backend first
-        const localApiUrl = window.ENV.API_URL;
-        const response = await axios.get(`${localApiUrl}/profile/${user?.email}`, {
+        const localApiUrl = window.ENV?.API_URL;
+        if (!localApiUrl || !user?.email || !user?.token) return;
+
+        const response = await axios.get(`${localApiUrl}/profile/${user.email}`, {
           headers: {
-            'Authorization': `Bearer ${user?.token}`,
+            'Authorization': `Bearer ${user.token}`,
             'Content-Type': 'application/json'
           },
           withCredentials: true
@@ -161,27 +121,83 @@ export default function AdminIndex() {
           return;
         }
 
-        // Fallback to localStorage if backend fails or doesn't have the preference
-        const storedPreferences = localStorage.getItem('userPreferences');
-        if (storedPreferences) {
-          const { hideBalances: storedHideBalances } = JSON.parse(storedPreferences);
-          if (storedHideBalances !== undefined) {
-            setHideBalances(storedHideBalances);
-            // Sync with backend
-            toggleBalanceVisibility(storedHideBalances);
+        // Fallback to client-side storage if backend fails
+        try {
+          const storedPreferences = window.localStorage.getItem('userPreferences');
+          if (storedPreferences) {
+            const { hideBalances: storedHideBalances } = JSON.parse(storedPreferences);
+            if (storedHideBalances !== undefined) {
+              setHideBalances(storedHideBalances);
+              // Sync with backend
+              await toggleBalanceVisibility(storedHideBalances);
+            }
           }
+        } catch (storageError) {
+          console.error('Error accessing localStorage:', storageError);
         }
       } catch (error) {
         console.error('Error initializing preferences:', error);
-        // Fallback to default state
         setHideBalances(true);
       }
     };
 
-    if (user?.email) {
+    if (isMounted) {
       initializePreferences();
     }
-  }, [user?.email]);
+  }, [user?.email, user?.token, isMounted]);
+
+  // Toggle balance visibility and update the server
+  const toggleBalanceVisibility = async (newState: boolean) => {
+    if (!user || typeof window === 'undefined') return;
+
+    try {
+      // Update local state first for immediate feedback
+      setHideBalances(newState);
+
+      // Update session through Remix form submission
+      const formData = new FormData();
+      formData.append("hideBalances", String(newState));
+      submit(formData, { method: "post" });
+
+      // Update context
+      updatePreferences({ hideBalances: newState });
+
+      // Update backend
+      const localApiUrl = window.ENV?.API_URL;
+      if (!localApiUrl) {
+        console.error('API URL is not defined');
+        return;
+      }
+
+      await axios.post(`${localApiUrl}/profile/hideBalances`, {
+        email: user.email,
+        hideBalances: newState
+      }, {
+        headers: {
+          'Authorization': `Bearer ${user.token}`,
+          'Content-Type': 'application/json'
+        },
+        withCredentials: true
+      });
+
+      // Store preference in localStorage as backup (client-side only)
+      try {
+        const currentPreferences = window.localStorage.getItem('userPreferences');
+        const parsedPreferences = currentPreferences ? JSON.parse(currentPreferences) : {};
+        window.localStorage.setItem('userPreferences', JSON.stringify({
+          ...parsedPreferences,
+          hideBalances: newState
+        }));
+      } catch (storageError) {
+        console.error('Error updating localStorage:', storageError);
+      }
+
+    } catch (error) {
+      console.error('Error updating balance visibility:', error);
+      setHideBalances(!newState);
+      alert('An unexpected error occurred. Please try again later.');
+    }
+  };
 
   const fetchUserData = useCallback(async () => {
     if (!user?.email) return;

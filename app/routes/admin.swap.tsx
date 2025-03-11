@@ -1,57 +1,93 @@
 import { useState, useEffect } from 'react';
 import { json, LoaderFunction, ActionFunction, redirect } from '@remix-run/node';
-import { useLoaderData } from '@remix-run/react';
+import { useLoaderData, useSubmit } from '@remix-run/react';
 import axios from 'axios';
 import { z } from 'zod';
-import { getUserFromSession } from '~/sessions/index';
+import { getUserFromSession } from '~/sessions';
 import "~/styles/swap.css";
 
 // Asset definitions
 const ASSETS = {
-  XLM: { code: 'XLM', issuer: undefined },
-  USDC: { 
-    code: 'USDC', 
+  XLM: {
+    code: 'XLM',
+    issuer: undefined
+  },
+  USDC: {
+    code: 'USDC',
     issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5'
   },
   EURC: {
     code: 'EURC',
-    issuer: 'GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO'
+    issuer: 'GDLKW2PQKYSXCXOXZ3IXCQKXKW4JQJQVNQXQXKJXXNVRM4QXRQFYI7H5'
   }
 } as const;
 
-// Validation schemas matching backend
+// Validation schemas
 const AssetSchema = z.object({
   code: z.string(),
   issuer: z.string().optional()
-}).refine(data => {
-  if (data.code.toLowerCase() !== 'xlm' && data.code.toLowerCase() !== 'native' && !data.issuer) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Issuer is required for non-native assets"
 });
 
-const SwapFormSchema = z.object({
+const SwapFormData = z.object({
   sourceAsset: AssetSchema,
   destinationAsset: AssetSchema,
-  amount: z.string().regex(/^\d*\.?\d{0,7}$/),
-  memo: z.string().max(28).optional(),
-  slippageTolerance: z.number().min(0.01).max(100).default(2)
+  amount: z.string().min(1),
+  memo: z.string().optional(),
+  slippageTolerance: z.number().min(0.1).max(5)
+});
+
+const EstimateRequestSchema = z.object({
+  email: z.string().email(),
+  sourceAsset: AssetSchema,
+  destinationAsset: AssetSchema,
+  amount: z.string().min(1),
+  sendExact: z.boolean(),
+  network: z.enum(['testnet', 'mainnet']),
+  strictSendAmount: z.string().optional(),
+  strictReceiveAmount: z.string().optional(),
+  pathConfig: z.object({
+    maxPaths: z.number(),
+    minSourceAmount: z.string(),
+    maxSourceAmount: z.string(),
+    allowIndirect: z.boolean()
+  })
 });
 
 interface SwapFormData {
   sourceAsset: {
     code: string;
-    issuer: string;
+    issuer?: string;
   };
   destinationAsset: {
     code: string;
-    issuer: string;
+    issuer?: string;
   };
   amount: string;
   memo: string;
   slippageTolerance: number;
+}
+
+interface EstimateRequestData {
+  email: string;
+  sourceAsset: {
+    code: string;
+    issuer: string | null;
+  };
+  destinationAsset: {
+    code: string;
+    issuer: string | null;
+  };
+  amount: string;
+  sendExact: boolean;
+  network: 'testnet' | 'mainnet';
+  strictSendAmount: string | null;
+  strictReceiveAmount: string | null;
+  pathConfig: {
+    maxPaths: number;
+    minSourceAmount: string;
+    maxSourceAmount: string;
+    allowIndirect: boolean;
+  };
 }
 
 interface CurrencyData {
@@ -69,10 +105,30 @@ type ApiResponse = CurrencyData[];
 
 export const loader: LoaderFunction = async ({ request }) => {
   const user = await getUserFromSession(request);
-  if (!user) {
+
+  if (!user || !user.isAuthorized) {
     return redirect("/signin");
   }
-  return json({ user, ENV: { API_URL: process.env.API_URL } });
+
+  try {
+    // Ensure API_URL is defined before returning it
+    const apiUrl = process.env.VITE_API_URL;
+    if (!apiUrl) {
+      throw new Error('API URL is not defined');
+    }
+
+    return json({ 
+      user, 
+      ENV: {
+        API_URL: apiUrl,
+        CIRCLE_USDC_ISSUER_MAINNET: process.env.CIRCLE_USDC_ISSUER_MAINNET,
+        CIRCLE_USDC_ISSUER_TESTNET: process.env.CIRCLE_USDC_ISSUER_TESTNET
+      }
+    });
+  } catch (error) {
+    console.error("Error in swap loader:", error);
+    throw error;
+  }
 };
 
 export const action: ActionFunction = async ({ request }) => {
@@ -81,7 +137,7 @@ export const action: ActionFunction = async ({ request }) => {
     const rawData = Object.fromEntries(formData);
 
     // Parse and validate the form data
-    const validatedData = SwapFormSchema.parse({
+    const validatedData = SwapFormData.parse({
       sourceAsset: {
         code: rawData.sourceAssetCode,
         issuer: rawData.sourceAssetIssuer || undefined
@@ -107,50 +163,55 @@ export const action: ActionFunction = async ({ request }) => {
 };
 
 export default function Swap() {
-  const { user, ENV } = useLoaderData<{ user: any; ENV: { API_URL: string } }>();
+  const { user, ENV } = useLoaderData<{ 
+    user: any; 
+    ENV: { 
+      API_URL: string;
+      CIRCLE_USDC_ISSUER_MAINNET: string;
+      CIRCLE_USDC_ISSUER_TESTNET: string;
+    }
+  }>();
+
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<React.ReactNode | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<React.ReactNode | null>(null);
-  const [estimatedAmount, setEstimatedAmount] = useState('');
+  const [estimatedAmount, setEstimatedAmount] = useState<string>('');
   const [exchangeRate, setExchangeRate] = useState<string | null>(null);
   const [currencyRates, setCurrencyRates] = useState<{ [key: string]: number }>({});
-  const apiUrl = ENV.API_URL || 'http://localhost:8000/api';
+  const [priceDeviation, setPriceDeviation] = useState<number | null>(null);
+  const apiUrl = ENV.API_URL;
   const token = user?.token;
 
   const [formData, setFormData] = useState<SwapFormData>({
-    sourceAsset: {
-      code: 'XLM',
-      issuer: ''
-    },
-    destinationAsset: {
-      code: 'USDC',
-      issuer: ASSETS.USDC.issuer || ''
-    },
+    sourceAsset: ASSETS.XLM,
+    destinationAsset: ASSETS.USDC,
     amount: '',
     memo: '',
-    slippageTolerance: 2
+    slippageTolerance: 1.0
   });
 
-  // Fetch balances when network changes
+  // Fetch balances when user or network changes
   useEffect(() => {
-    if (user?.email && token) {
+    if (user?.email && user?.token) {
       fetchBalances();
     }
-  }, [user?.email, token]);
+  }, [user?.email, user?.token, user?.preferences?.network]);
 
   const fetchBalances = async () => {
     try {
       const response = await axios.get(
-        `${apiUrl}/balance`,
+        `${apiUrl}/api/user/balance/${encodeURIComponent(user.email)}`,
         {
-          params: {
-            email: user.email,
-            network: user.preferences?.network || 'mainnet'
-          },
           headers: {
-            'Authorization': `Bearer ${token}`
-          }
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          params: {
+            network: user.preferences?.network || 'testnet'
+          },
+          withCredentials: true
         }
       );
       if (response.data.balances) {
@@ -192,6 +253,26 @@ export default function Swap() {
     return () => clearInterval(interval);
   }, [apiUrl, token]);
 
+  // Calculate price deviation when currency rates or estimated amount changes
+  useEffect(() => {
+    if (currencyRates && formData.amount && estimatedAmount) {
+      const xlmRate = currencyRates['XLM'] || 0;
+      const usdcRate = currencyRates['USDC'] || 1; // USDC should be ~1 USD
+      
+      if (xlmRate && usdcRate) {
+        // Market rate: How many XLM should be needed for 1 USDC
+        const marketRate = usdcRate / xlmRate;
+        
+        // Actual rate from the swap: XLM needed for 1 USDC
+        const swapRate = parseFloat(estimatedAmount) / parseFloat(formData.amount);
+        
+        // Calculate deviation
+        const deviation = ((swapRate - marketRate) / marketRate) * 100;
+        setPriceDeviation(deviation);
+      }
+    }
+  }, [currencyRates, formData.amount, estimatedAmount]);
+
   const getBalance = (assetCode: string, assetIssuer?: string): string => {
     const balance = balances.find(b => {
       if (assetCode === 'XLM') {
@@ -202,172 +283,166 @@ export default function Swap() {
     return balance ? balance.balance : '0';
   };
 
-  const getEstimatedAmount = async (amount: string) => {
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      setEstimatedAmount('');
-      setExchangeRate(null);
-      setError('Please enter a valid amount greater than 0');
+  const getEstimate = async () => {
+    if (!user.token) {
+      setError('Not authenticated. Please try signing in again.');
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    try {
-      // Format amount to 7 decimal places
-      const formattedAmount = parseFloat(amount).toFixed(7);
+    if (!formData.sourceAsset.code || !formData.destinationAsset.code || !formData.amount || isNaN(parseFloat(formData.amount))) {
+      setEstimatedAmount('');
+      setExchangeRate(null);
+      return;
+    }
 
-      // Create the request body for estimation
-      const createEstimateRequestBody = () => ({
+    let estimateRequestBody: EstimateRequestData | null = null;
+    
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Format amount to 7 decimal places
+      const formattedAmount = parseFloat(formData.amount).toFixed(7);
+      const network = user.preferences?.network || 'testnet';
+
+      if (!user.email) {
+        throw new Error('User email is required');
+      }
+
+      // Helper function to handle asset issuer
+      const getAssetIssuer = (code: string, issuer?: string): string | null => {
+        return code.toLowerCase() === 'xlm' ? null : (issuer || null);
+      };
+
+      // Prepare request body exactly matching EstimateRequestSchema
+      estimateRequestBody = {
         email: user.email,
         sourceAsset: {
           code: formData.sourceAsset.code,
-          issuer: formData.sourceAsset.code === 'XLM' ? undefined : ASSETS[formData.sourceAsset.code as keyof typeof ASSETS].issuer
+          issuer: getAssetIssuer(formData.sourceAsset.code, formData.sourceAsset.issuer)
         },
         destinationAsset: {
           code: formData.destinationAsset.code,
-          issuer: ASSETS[formData.destinationAsset.code as keyof typeof ASSETS].issuer
+          issuer: getAssetIssuer(formData.destinationAsset.code, formData.destinationAsset.issuer)
         },
         amount: formattedAmount,
-        sendExact: true,
-        network: user.preferences?.network || 'mainnet'
-      });
+        network: network,
+        sendExact: false,
+        strictReceiveAmount: formattedAmount,
+        strictSendAmount: null,
+        pathConfig: {
+          maxPaths: 1,
+          minSourceAmount: "0",
+          maxSourceAmount: "100000",
+          allowIndirect: false
+        }
+      };
 
-      const requestBody = createEstimateRequestBody();
-      console.log('Estimation request body:', JSON.stringify(requestBody, null, 2));
+      console.log('Estimate request payload:', {
+        ...estimateRequestBody,
+        sourceAsset: {
+          ...estimateRequestBody.sourceAsset,
+          isXLM: estimateRequestBody.sourceAsset.code.toLowerCase() === 'xlm'
+        },
+        destinationAsset: {
+          ...estimateRequestBody.destinationAsset,
+          isXLM: estimateRequestBody.destinationAsset.code.toLowerCase() === 'xlm'
+        }
+      });
 
       const response = await axios.post(
         `${apiUrl}/swap/estimate`,
-        requestBody,
+        estimateRequestBody,
         {
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${user.token}`,
+            'Content-Type': 'application/json'
           }
         }
       );
 
-      console.log('Swap estimation response:', JSON.stringify(response.data, null, 2));
+      console.log('Estimate response:', response.data);
 
-      if (response.data.estimated_amount) {
-        const estimatedAmount = response.data.estimated_amount;
-        setEstimatedAmount(estimatedAmount);
-        
-        // Calculate and display exchange rate
-        const sourceAmount = parseFloat(estimatedAmount); // Amount of source asset needed
-        const destAmount = parseFloat(amount);           // Amount of destination asset wanted
-        
-        if (!isNaN(sourceAmount) && !isNaN(destAmount) && sourceAmount !== 0) {
-          // Get expected rate from real-time currency data
-          const sourceRate = currencyRates[formData.sourceAsset.code] || 0;
-          const destRate = currencyRates[formData.destinationAsset.code] || 0;
-          
-          let expectedRate = 1;
-          if (sourceRate && destRate) {
-            expectedRate = destRate / sourceRate;
-          }
-
-          // Calculate rate deviation from market price
-          const actualRate = destAmount / sourceAmount;
-          const deviation = Math.abs((actualRate - expectedRate) / expectedRate) * 100;
-          
-          console.log('Rate analysis:', {
-            sourceAmount,
-            destAmount,
-            actualRate,
-            expectedRate,
-            deviationPercent: deviation.toFixed(2) + '%',
-            sourceAsset: formData.sourceAsset.code,
-            destinationAsset: formData.destinationAsset.code,
-            marketRates: {
-              [formData.sourceAsset.code]: sourceRate,
-              [formData.destinationAsset.code]: destRate
-            }
-          });
-
-          // Warn if rate deviates too much from market rate
-          if (deviation > 5) {
-            setError(
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
-                <p className="font-medium">
-                  Heads up! 🚨 The exchange rate seems unusual.
-                </p>
-                <p className="text-sm mt-1">
-                  You might be getting a not-so-good deal right now. The current rate is quite different 
-                  from what we usually see (about {deviation.toFixed(1)}% different).
-                  Maybe try again in a little while?
-                </p>
-              </div>
-            );
-          } else {
-            setError(null);
-          }
-          
-          setExchangeRate(`1 ${formData.sourceAsset.code} = ${actualRate.toFixed(7)} ${formData.destinationAsset.code}`);
-        } else {
-          setExchangeRate(null);
-        }
-      } else {
-        console.warn('No estimation in response:', response.data);
-        setError('No valid path found for this swap');
-        setEstimatedAmount('');
-        setExchangeRate(null);
+      if (response.data.error) {
+        throw new Error(response.data.error);
       }
-    } catch (err) {
-      if (axios.isAxiosError(err)) {
-        console.error('Error response:', err.response?.status);
-        console.error('Error data:', JSON.stringify(err.response?.data, null, 2));
-        console.error('Request data:', JSON.stringify(err.config?.data, null, 2));
-        setError(err.response?.data?.error || err.response?.data?.message || 'Failed to fetch estimation');
-      } else {
-        console.error('Error processing swap:', err);
-        setError('Failed to fetch estimation');
+
+      // When receiving exact amount, estimated_amount is how much we need to send
+      const estimatedAmount = response.data.source_amount;
+      if (!estimatedAmount) {
+        throw new Error('No valid path found for this swap');
       }
-      setLoading(false);
-      return;
+
+      // Validate the path is direct (no intermediate assets)
+      if (response.data.path && response.data.path.length > 0) {
+        console.warn('Received indirect path:', response.data.path);
+        throw new Error('Only direct swaps are supported');
+      }
+
+      setEstimatedAmount(estimatedAmount);
+      
+      if (formData.amount && estimatedAmount) {
+        // When receiving USDC:
+        // - formData.amount is how much USDC we want to receive
+        // - estimatedAmount is how much XLM we need to send
+        const xlmAmount = parseFloat(estimatedAmount);
+        const usdcAmount = parseFloat(formData.amount);
+        
+        // Calculate rate as XLM needed per USDC
+        const rate = (xlmAmount / usdcAmount).toFixed(7);
+        setExchangeRate(rate);
+      }
+
+      return estimatedAmount;
+
+    } catch (err: any) {
+      console.error('Error getting estimate:', {
+        requestBody: estimateRequestBody || 'Not initialized',
+        response: err.response?.data,
+        status: err.response?.status,
+        message: err.message
+      });
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to get estimate';
+      setError(errorMessage);
+      setEstimatedAmount('');
+      setExchangeRate(null);
+      throw err;
     } finally {
       setLoading(false);
     }
   };
 
-  const validateForm = (): boolean => {
-    try {
-      SwapFormSchema.parse(formData);
-      setError(null);
-      return true;
-    } catch (err) {
-      if (err instanceof z.ZodError) {
-        setError(err.errors[0].message);
-      } else {
-        setError('Invalid form data');
-      }
-      return false;
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!formData.amount || isNaN(parseFloat(formData.amount)) || parseFloat(formData.amount) <= 0) {
-      setError('Please enter a valid amount greater than 0');
-      return;
-    }
-
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoading(true);
     setError(null);
     setSuccess(null);
 
+    if (!user?.token) {
+      setError('Authentication required. Please sign in.');
+      setLoading(false);
+      return;
+    }
+
     try {
+      // Use the existing estimate
+      if (!estimatedAmount) {
+        throw new Error('Please wait for the estimate to complete');
+      }
+
       // Format amount to 7 decimal places
       const formattedAmount = parseFloat(formData.amount).toFixed(7);
-
+      
+      // Prepare swap request body
       const swapRequestBody = {
         email: user.email,
         sourceAsset: {
           code: formData.sourceAsset.code,
-          issuer: formData.sourceAsset.code === 'XLM' ? undefined : ASSETS[formData.sourceAsset.code as keyof typeof ASSETS].issuer
+          issuer: formData.sourceAsset.code === 'XLM' ? undefined : formData.sourceAsset.issuer
         },
         destinationAsset: {
           code: formData.destinationAsset.code,
-          issuer: ASSETS[formData.destinationAsset.code as keyof typeof ASSETS].issuer
+          issuer: formData.destinationAsset.issuer
         },
         amount: formattedAmount,
         memo: formData.memo,
@@ -375,92 +450,124 @@ export default function Swap() {
         slippageTolerance: formData.slippageTolerance
       };
 
-      console.log('Swap request body:', JSON.stringify(swapRequestBody, null, 2));
+      console.log('Swap request:', JSON.stringify(swapRequestBody, null, 2));
 
-      const response = await axios.post(
+      // Proceed with the swap
+      const swapResponse = await axios.post(
         `${apiUrl}/swap`,
         swapRequestBody,
         {
           headers: {
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${user.token}`,
+            'Content-Type': 'application/json'
           }
         }
       );
 
-      console.log('Swap response:', response.data);
+      console.log('Swap response:', swapResponse.data);
 
-      if (response.data.result?.hash) {
-        const explorerUrl = `https://stellar.expert/explorer/public/tx/${response.data.result.hash}`;
-        console.log('Setting success message with hash:', response.data.result.hash);
-        console.log('Explorer URL:', explorerUrl);
-        
-        setSuccess(
-          <div className="success-message" style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#e6ffe6', borderRadius: '4px' }}>
-            <p style={{ margin: '0 0 0.5rem 0' }}>Swap successful! 🎉</p>
-            <p style={{ margin: '0' }}>
-              Transaction Hash:{' '}
-              <a 
-                href={explorerUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: '#0066cc', textDecoration: 'underline' }}
-              >
-                {response.data.result.hash}
-              </a>
-            </p>
-          </div>
-        );
-
-        // Reset form
-        setFormData(prev => ({
-          ...prev,
-          amount: '',
-          memo: ''
-        }));
-        setEstimatedAmount('');
-        setExchangeRate(null);
-      } else {
-        console.warn('No hash in response:', response.data);
-        setError('Swap completed but transaction hash not found');
-      }
+      setSuccess(
+        <div>
+          <p>Swap completed successfully!</p>
+          <p>Amount: {formattedAmount} {formData.sourceAsset.code} → {estimatedAmount} {formData.destinationAsset.code}</p>
+          <p>Transaction Hash: {swapResponse.data.result.hash}</p>
+        </div>
+      );
+      
+      // Refresh balances after successful swap
+      await fetchBalances();
+      
     } catch (err: any) {
-      console.error('Swap failed:', err);
-      setError(err.response?.data?.message || 'Failed to complete swap. Please try again.');
+      console.error('Request error:', {
+        response: err.response?.data,
+        status: err.response?.status,
+        message: err.message
+      });
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to process request';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  const sourceBalance = getBalance(formData.sourceAsset.code, formData.sourceAsset.issuer);
+  const destinationBalance = getBalance(formData.destinationAsset.code, formData.destinationAsset.issuer);
+
+  useEffect(() => {
+    if (formData.amount && !isNaN(parseFloat(formData.amount))) {
+      getEstimate();
+    }
+  }, [formData.amount]);
+
+  const renderEstimatedAmount = () => {
+    if (loading) {
+      return 'Calculating...';
+    }
+    if (!formData.amount || isNaN(parseFloat(formData.amount))) {
+      return '';
+    }
+    return estimatedAmount;
+  };
+
+  const renderPriceDeviation = () => {
+    if (priceDeviation === null) return null;
+    
+    const deviationAbs = Math.abs(priceDeviation);
+    let color = 'text-green-500';
+    let warning = '';
+    
+    if (deviationAbs > 3) {
+      color = 'text-red-500';
+      warning = 'High price deviation! Consider reviewing the swap details.';
+    } else if (deviationAbs > 1) {
+      color = 'text-yellow-500';
+      warning = 'Moderate price deviation.';
+    }
+    
+    return (
+      <div className={`mt-2 ${color}`}>
+        <p>Price Deviation: {priceDeviation.toFixed(2)}%</p>
+        {warning && <p className="text-sm">{warning}</p>}
+      </div>
+    );
+  };
+
+  const validateForm = () => {
+    if (!formData.amount || isNaN(parseFloat(formData.amount)) || parseFloat(formData.amount) <= 0) {
+      return false;
+    }
+    if (!formData.sourceAsset || !formData.destinationAsset) {
+      return false;
+    }
+    if (!user?.email || !user?.token) {
+      return false;
+    }
+    return true;
+  };
+
   return (
     <div className="swap-container" style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem' }}>
       <h1 style={{ marginBottom: '2rem', textAlign: 'center' }}>Swap Assets</h1>
-      
+
       {error && (
-        <div className="error-message" style={{ 
-          backgroundColor: '#ffe6e6', 
-          padding: '1rem', 
-          borderRadius: '4px', 
-          marginBottom: '1rem',
-          color: '#cc0000'
-        }}>
+        <div className="error-message" style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#ffe6e6', borderRadius: '4px' }}>
           {error}
         </div>
       )}
-      
+
       {success && (
-        <div style={{ marginBottom: '1rem' }}>
+        <div className="success-message" style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#e6ffe6', borderRadius: '4px' }}>
           {success}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <div className="swap-section">
-          <div className="you-receive-section">
-            <h3>You Want to Receive {formData.destinationAsset.code}</h3>
-            <div className="input-group">
+      <div className="swap-section">
+        <h2>You Want to Receive {formData.destinationAsset.code}</h2>
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
               <input
-                type="text"
-                name="amount"
+                type="number"
                 value={formData.amount}
                 onChange={(e) => {
                   const newAmount = e.target.value;
@@ -469,145 +576,142 @@ export default function Swap() {
                     amount: newAmount
                   }));
                   if (newAmount) {
-                    getEstimatedAmount(newAmount);
+                    getEstimate();
                   } else {
                     setEstimatedAmount('');
                     setExchangeRate(null);
                   }
                 }}
-                placeholder={`Enter amount of ${formData.destinationAsset.code} to receive`}
+                placeholder="Enter amount"
+                style={{ width: '100%', padding: '0.5rem' }}
               />
-              <select
-                name="destinationAsset"
-                value={`${formData.destinationAsset.code}${formData.destinationAsset.issuer ? '-' + formData.destinationAsset.issuer : ''}`}
-                onChange={(e) => {
-                  const [code, issuer] = e.target.value.split('-');
-                  setFormData(prev => ({
-                    ...prev,
-                    destinationAsset: {
-                      code,
-                      issuer: issuer || ''
-                    }
-                  }));
-                  if (formData.amount) {
-                    getEstimatedAmount(formData.amount);
-                  }
-                }}
-              >
-                {Object.entries(ASSETS).map(([key, asset]) => (
-                  <option 
-                    key={key} 
-                    value={`${asset.code}${asset.issuer ? '-' + asset.issuer : ''}`}
-                  >
-                    {asset.code}
-                  </option>
-                ))}
-              </select>
             </div>
-            <div className="balance">
-              Balance: {getBalance(formData.destinationAsset.code, formData.destinationAsset.issuer)} {formData.destinationAsset.code}
-            </div>
-          </div>
-
-          <div className="you-pay-section">
-            <h3>You'll Need to Send {formData.sourceAsset.code} (Estimated)</h3>
-            <div className="input-group">
-              <input
-                type="text"
-                value={loading ? "Calculating..." : (estimatedAmount || "")}
-                readOnly
-                placeholder={`Estimated ${formData.sourceAsset.code} amount`}
-                className={loading ? 'input-loading' : ''}
-              />
-              <select
-                name="sourceAsset"
-                value={`${formData.sourceAsset.code}${formData.sourceAsset.issuer ? '-' + formData.sourceAsset.issuer : ''}`}
-                onChange={(e) => {
-                  const [code, issuer] = e.target.value.split('-');
-                  setFormData(prev => ({
-                    ...prev,
-                    sourceAsset: {
-                      code,
-                      issuer: issuer || ''
-                    }
-                  }));
-                  if (formData.amount) {
-                    getEstimatedAmount(formData.amount);
-                  }
-                }}
-              >
-                {Object.entries(ASSETS).map(([key, asset]) => (
-                  <option 
-                    key={key} 
-                    value={`${asset.code}${asset.issuer ? '-' + asset.issuer : ''}`}
-                  >
-                    {asset.code}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="balance">
-              Available: {getBalance(formData.sourceAsset.code, formData.sourceAsset.issuer)} {formData.sourceAsset.code}
-            </div>
-            {exchangeRate && (
-              <div className="exchange-rate">
-                Exchange Rate: {exchangeRate}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="additional-options">
-          <div className="slippage-tolerance">
-            <label>Slippage Tolerance (%):</label>
-            <input
-              type="number"
-              name="slippageTolerance"
-              value={formData.slippageTolerance}
+            <select
+              value={formData.destinationAsset.code}
               onChange={(e) => {
-                const value = parseFloat(e.target.value);
-                if (!isNaN(value) && value >= 0.01 && value <= 100) {
+                const selectedAsset = Object.values(ASSETS).find(
+                  asset => asset.code === e.target.value
+                );
+                if (selectedAsset && selectedAsset.code !== formData.sourceAsset.code) {
                   setFormData(prev => ({
                     ...prev,
-                    slippageTolerance: value
+                    destinationAsset: selectedAsset
                   }));
+                  if (formData.amount) {
+                    getEstimate();
+                  }
                 }
               }}
-              min="0.1"
-              max="5"
-              step="0.1"
-            />
-          </div>
-
-          <div className="memo-field">
-            <label>Memo (Optional):</label>
-            <input
-              type="text"
-              name="memo"
-              value={formData.memo}
-              onChange={(e) => {
-                setFormData(prev => ({
-                  ...prev,
-                  memo: e.target.value
-                }));
+              style={{ 
+                padding: '0.5rem',
+                minWidth: '120px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: 'white'
               }}
-              maxLength={28}
-              placeholder="Enter memo"
-            />
+            >
+              {Object.values(ASSETS)
+                .filter(asset => asset.code !== formData.sourceAsset.code)
+                .map((asset) => (
+                  <option key={asset.code} value={asset.code}>
+                    {asset.code}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div style={{ marginTop: '0.5rem', color: '#666' }}>
+            Balance: {destinationBalance} {formData.destinationAsset.code}
           </div>
         </div>
 
-        {error && <div className="error-message">{error}</div>}
-        {success}
-        
-        <button 
-          type="submit" 
+        <h2>You'll Need to Send {formData.sourceAsset.code} (Estimated)</h2>
+        <div style={{ marginBottom: '1rem' }}>
+          <input
+            type="text"
+            value={renderEstimatedAmount()}
+            readOnly
+            placeholder="Estimated amount"
+            style={{ 
+              width: '100%', 
+              padding: '0.5rem', 
+              backgroundColor: '#f5f5f5',
+              color: loading ? '#666' : 'inherit'
+            }}
+          />
+          <div style={{ marginTop: '0.5rem', color: '#666' }}>
+            Available: {sourceBalance} {formData.sourceAsset.code}
+          </div>
+          {parseFloat(estimatedAmount) > parseFloat(sourceBalance || '0') && (
+            <div style={{ color: 'red', marginTop: '0.5rem' }}>
+              ⚠️ Insufficient balance
+            </div>
+          )}
+        </div>
+
+        {exchangeRate && (
+          <div style={{ margin: '1rem 0', padding: '0.5rem', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+            <p style={{ margin: '0' }}>
+              Exchange Rate: 1 {formData.sourceAsset.code} ≈ {exchangeRate} {formData.destinationAsset.code}
+            </p>
+          </div>
+        )}
+
+        {renderPriceDeviation()}
+
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+            Slippage Tolerance: {formData.slippageTolerance}%
+          </label>
+          <input
+            type="range"
+            min="0.1"
+            max="5"
+            step="0.1"
+            value={formData.slippageTolerance}
+            onChange={(e) => {
+              const value = parseFloat(e.target.value);
+              if (!isNaN(value) && value >= 0.1 && value <= 5) {
+                setFormData(prev => ({
+                  ...prev,
+                  slippageTolerance: value
+                }));
+              }
+            }}
+            style={{ width: '100%' }}
+          />
+          <small style={{ color: '#666' }}>
+            Your transaction will revert if the price changes unfavorably by more than this percentage.
+          </small>
+        </div>
+
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+            Memo (Optional)
+          </label>
+          <input
+            type="text"
+            value={formData.memo}
+            onChange={(e) => setFormData(prev => ({ ...prev, memo: e.target.value }))}
+            placeholder="Enter memo"
+            maxLength={28}
+            style={{ width: '100%', padding: '0.5rem' }}
+          />
+        </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={loading || !estimatedAmount || parseFloat(estimatedAmount) > parseFloat(sourceBalance || '0') || !validateForm()}
           className={`swap-button ${loading ? 'loading' : ''}`}
-          disabled={loading || !formData.amount}
+          style={{ width: '100%', padding: '1rem', marginTop: '1rem' }}
         >
           {loading ? 'Processing...' : 'Swap'}
         </button>
-      </form>
+      </div>
+      <div className="mt-4">
+        {renderPriceDeviation()}
+        {error && <div className="text-red-500 mt-2">{error}</div>}
+        {success && <div className="text-green-500 mt-2">{success}</div>}
+      </div>
     </div>
   );
 }
