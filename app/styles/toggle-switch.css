@@ -5,13 +5,15 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: #ccc;
-  transition: .4s;
+  background-color: #e0e0e0;
+  transition: all 0.4s ease;
   border-radius: 34px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .toggle-switch.active {
-  background-color: #2196F3;
+  background-color: #4f46e5;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .toggle-switch::before {
@@ -22,10 +24,35 @@
   left: 4px;
   bottom: 4px;
   background-color: white;
-  transition: .4s;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
 .toggle-switch.active::before {
   transform: translateX(26px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* Container styles for better positioning */
+.switch-container {
+  position: relative;
+  width: 60px;
+  height: 34px;
+  display: inline-block;
+}
+
+/* Focus styles for accessibility */
+.switch-container:focus-within .toggle-switch {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+/* Hover effect */
+.toggle-switch:hover {
+  background-color: #d1d1d1;
+}
+
+.toggle-switch.active:hover {
+  background-color: #4338ca;
 }

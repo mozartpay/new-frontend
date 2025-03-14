@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useFetcher, useLoaderData, redirect } from '@remix-run/react';
 import { json, ActionFunction, LoaderFunction } from '@remix-run/node';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,6 +17,8 @@ import avatar from '~/assets/img/avatars/avatar2.png';
 import type { User } from '~/types/user';
 
 const DEFAULT_CURRENCIES = ['XLM', 'USDC', 'EURC'];
+const DEFAULT_NETWORK = 'testnet';
+const DEFAULT_CURRENCY = 'USD';
 
 const NETWORK_OPTIONS = [
   { value: 'mainnet', label: 'Mainnet', description: 'Production network for real transactions', url: 'https://horizon.stellar.org' },
@@ -28,6 +30,12 @@ interface LoaderData {
   success: boolean;
   user: User;
   apiUrl: string;
+}
+
+// Define the fetcher response type
+interface FetcherResponse {
+  error?: string;
+  success?: boolean;
 }
 
 export const loader: LoaderFunction = async ({ request }) => {
@@ -69,8 +77,14 @@ export const action: ActionFunction = async ({ request }) => {
     try {
         const session = await getSession(request);
         const formData = await request.formData();
-        const preferredCurrency = formData.get("preferredCurrency") as string;
-        const preferredNetwork = formData.get("preferredNetwork") as string;
+        const updates: Partial<ProfileFormData> = {};
+        
+        // Only include provided fields in updates
+        const preferredCurrency = formData.get("preferredCurrency");
+        const preferredNetwork = formData.get("preferredNetwork");
+        
+        if (preferredCurrency) updates.preferredCurrency = preferredCurrency as string;
+        if (preferredNetwork) updates.preferredNetwork = preferredNetwork as string;
 
         const encryptedUser = session.get("user");
         if (!encryptedUser) {
@@ -79,15 +93,15 @@ export const action: ActionFunction = async ({ request }) => {
 
         let user = JSON.parse(decrypt(encryptedUser));
         
-        // Update the user object with any provided preferences
-        if (preferredCurrency) {
-            user.preferredCurrency = preferredCurrency;
+        // Update only the provided preferences
+        if (updates.preferredCurrency) {
+            user.preferredCurrency = updates.preferredCurrency;
         }
-        if (preferredNetwork) {
-            user.preferredNetwork = preferredNetwork;
+        if (updates.preferredNetwork) {
+            user.preferredNetwork = updates.preferredNetwork;
             user.preferences = {
-              ...user.preferences,
-              network: preferredNetwork
+                ...user.preferences,
+                network: updates.preferredNetwork
             };
         }
 
@@ -95,9 +109,8 @@ export const action: ActionFunction = async ({ request }) => {
         session.set("user", encrypt(JSON.stringify(user)));
 
         return json({ 
-            success: true, 
-            preferredCurrency,
-            preferredNetwork 
+            success: true,
+            ...updates
         }, {
             headers: {
                 "Set-Cookie": await commitSession(session)
@@ -111,19 +124,172 @@ export const action: ActionFunction = async ({ request }) => {
 };
 
 export default function AdminProfile() {
-  const { user: loaderUser, apiUrl } = useLoaderData<LoaderData>();
-  const fetcher = useFetcher();
+  // Get user from loader data
+  const { user, apiUrl } = useLoaderData<typeof loader>();
+  const { updatePreferences } = useUser();
   const navigate = useNavigate();
-  const { user, setUser, updatePreferences } = useUser();
-  const [isClient, setIsClient] = useState(false);
-  const [privateKey, setPrivateKey] = useState<string | null>(null);
-  const [isPrivateKeyBlurred, setIsPrivateKeyBlurred] = useState<boolean>(true);
-  const [loadingPrivateKey, setLoadingPrivateKey] = useState<boolean>(false);
+  // Type the fetcher properly
+  const fetcher = useFetcher<FetcherResponse>();
   const [error, setError] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
   const [userImage, setUserImage] = useState<string | null>(null);
   const [networkChangeMessage, setNetworkChangeMessage] = useState<string | null>(null);
+  const [privateKey, setPrivateKey] = useState<string | null>(null);
+  const [isPrivateKeyBlurred, setIsPrivateKeyBlurred] = useState<boolean>(true);
+  const [loadingPrivateKey, setLoadingPrivateKey] = useState<boolean>(false);
+  const networkBeingUpdated = useRef<string | null>(null);
 
+  // Define syncNetworkPreference first
+  const syncNetworkPreference = useCallback(async (newNetwork: string): Promise<boolean> => {
+    if (!user?.email) return false;
+
+    try {
+      // 1. Update API first
+      const response = await axios.post(`${apiUrl}/profile/preferredNetwork`, {
+        email: user.email,
+        preferredNetwork: newNetwork
+      });
+
+      if (response.data.status !== 'success') {
+        throw new Error(response.data.message || 'Failed to update network preference');
+      }
+
+      // 2. Update local state through form submission
+      fetcher.submit(
+        { preferredNetwork: newNetwork },
+        { method: "post" }
+      );
+
+      // 3. Update local state immediately (don't wait for form submission)
+      updatePreferences({ network: newNetwork });
+
+      // 4. Update localStorage
+      const storedPreferences = localStorage.getItem('userPreferences');
+      const parsedPreferences = storedPreferences ? JSON.parse(storedPreferences) : {};
+      localStorage.setItem('userPreferences', JSON.stringify({
+        ...parsedPreferences,
+        network: newNetwork,
+        preferredNetwork: newNetwork
+      }));
+
+      return true;
+    } catch (error) {
+      console.error('Failed to sync network preference:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update network preference');
+      setTimeout(() => setError(null), 3000);
+      return false;
+    }
+  }, [user?.email, apiUrl, fetcher, updatePreferences]);
+
+  // Then define fetchBalanceAndSyncNetwork
+  const fetchBalanceAndSyncNetwork = useCallback(async () => {
+    if (!user?.email) return false;
+
+    // Prevent excessive requests by checking if a network update is already in progress
+    if (networkBeingUpdated.current) {
+      console.log('Network update already in progress, skipping balance fetch');
+      return false;
+    }
+
+    try {
+      // Correct the endpoint URL by removing the duplicate /api
+      const response = await axios.get(
+        `${apiUrl}/user/balance/${encodeURIComponent(user.email)}`,
+        {
+          params: {
+            network: user.preferences?.network || DEFAULT_NETWORK
+          }
+        }
+      );
+
+      if (!response.data || response.data.status === 'error') {
+        throw new Error(response.data?.message || 'Failed to fetch balance');
+      }
+
+      const balanceData = response.data;
+
+      // Only sync if networks differ, haven't recently synced, and user hasn't explicitly set a preference
+      if (balanceData.network && 
+          !user.preferences?.network && // Only sync if user has no explicit preference
+          balanceData.network !== networkBeingUpdated.current) {
+        console.log('Syncing network preference with balance response:', balanceData.network);
+        networkBeingUpdated.current = balanceData.network;
+        await syncNetworkPreference(balanceData.network);
+        networkBeingUpdated.current = null;
+      }
+
+      return true;
+    } catch (error) {
+      // Handle 404 errors specifically
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        console.log('Balance endpoint not found (404), will not retry');
+        return false; // Don't retry on 404
+      }
+
+      console.error('Error fetching balance:', error);
+      // Don't set error state here as it's not critical
+      return false;
+    }
+  }, [user?.email, user?.preferences?.network, apiUrl, syncNetworkPreference]);
+
+  // Now, modify the useEffect that calls fetchBalanceAndSyncNetwork
+  // Remove this useEffect entirely:
+  // useEffect(() => {
+  //   fetchBalanceAndSyncNetwork();
+  // }, [fetchBalanceAndSyncNetwork]);
+  
+  // And replace it with a debounced version:
+  const [shouldFetchBalance, setShouldFetchBalance] = useState(true);
+
+  useEffect(() => {
+    // Only fetch balance once when component mounts or when network changes
+    if (shouldFetchBalance && user?.email) {
+      setShouldFetchBalance(false);
+      
+      // Add a delay to prevent rapid successive calls
+      const timer = setTimeout(() => {
+        fetchBalanceAndSyncNetwork().finally(() => {
+          // Allow another fetch after a cooldown period
+          setTimeout(() => setShouldFetchBalance(true), 30000); // 30 second cooldown
+        });
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [user?.email, user?.preferences?.network, fetchBalanceAndSyncNetwork, shouldFetchBalance]);
+
+  // Then define fetchUserData
+  const fetchUserData = useCallback(async () => {
+    if (!user?.email) return;
+
+    try {
+      // Only fetch user profile data, don't fetch balance in parallel
+      const userResponse = await axios.get(`${apiUrl}/profile/${encodeURIComponent(user.email)}`);
+      
+      const userData = userResponse.data;
+      
+      // Ensure we prioritize the user's saved preferences from the database
+      updatePreferences({
+        hideBalances: userData.preferences?.hideBalances ?? false,
+        currency: userData.preferences?.currency ?? DEFAULT_CURRENCY,
+        network: userData.preferences?.network ?? DEFAULT_NETWORK // Prioritize DB preference
+      });
+      
+      if (userData.image && userData.image !== userImage) {
+        setUserImage(userData.image);
+      }
+
+      // Fetch balance separately after user data is loaded
+      await fetchBalanceAndSyncNetwork();
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      setError('Failed to load user data. Please try again later.');
+      setTimeout(() => setError(null), 3000);
+    }
+  }, [user?.email, userImage, apiUrl, fetchBalanceAndSyncNetwork]);
+
+  // Effects after all function definitions
   useEffect(() => {
     setIsClient(true);
   }, []);
@@ -135,23 +301,33 @@ export default function AdminProfile() {
   }, [user, navigate]);
 
   useEffect(() => {
+    if (user) {
+      const storedPreferences = localStorage.getItem('userPreferences');
+      const parsedPreferences = storedPreferences ? JSON.parse(storedPreferences) : null;
+      
+      // Use the new DEFAULT_NETWORK constant
+      const network = user.preferences?.network ?? parsedPreferences?.network ?? DEFAULT_NETWORK;
+      
+      // Only update if the network preference is different
+      if (network !== user.preferences?.network) {
+        syncNetworkPreference(network).catch(error => {
+          console.error('Error syncing initial network preference:', error);
+        });
+      }
+    }
+  }, [user?.email]); // Add user?.email as dependency to prevent unnecessary runs
+
+  useEffect(() => {
     // Get stored preferences
     const storedPreferences = localStorage.getItem('userPreferences');
     const parsedPreferences = storedPreferences ? JSON.parse(storedPreferences) : null;
     
     if (user) {
       // Prioritize order: user preferences > stored preferences > default
-      const network = user.preferences?.network ?? parsedPreferences?.network ?? 'testnet';
+      const network = user.preferences?.network ?? parsedPreferences?.network ?? DEFAULT_NETWORK;
       
       // Ensure network preference is synchronized
-      setUser(prevUser => prevUser ? {
-        ...prevUser,
-        preferences: {
-          ...prevUser.preferences,
-          network
-        },
-        preferredNetwork: network
-      } : null);
+      updatePreferences({ network });
       
       // Update localStorage
       localStorage.setItem('userPreferences', JSON.stringify({
@@ -162,41 +338,15 @@ export default function AdminProfile() {
     }
   }, []);
 
-  const fetchUserData = useCallback(async () => {
-    if (!user?.email) return;
-
-    try {
-      const response = await axios.get(`${apiUrl}/profile/${user.email}`);
-      const userData = response.data;
-      
-      console.log('Fetched user data:', {
-        currentNetwork: user?.preferences?.network,
-        newNetwork: userData?.preferences?.network,
-        testnetKey: userData?.publicKeyXlmTestnet,
-        mainnetKey: userData?.publicKeyXlmMainnet
-      });
-      
-      setUser(prevUser => prevUser ? {
-        ...prevUser, 
-        preferences: {
-          hideBalances: userData.preferences?.hideBalances ?? false,
-          currency: userData.preferences?.currency ?? 'USD',
-          network: userData.preferences?.network ?? prevUser.preferences?.network ?? 'mainnet'
-        },
-        preferredNetwork: userData.preferences?.network ?? prevUser.preferences?.network ?? 'mainnet',
-        publicKeyXlmTestnet: userData.publicKeyXlmTestnet || prevUser.publicKeyXlmTestnet,
-        publicKeyXlmMainnet: userData.publicKeyXlmMainnet || prevUser.publicKeyXlmMainnet,
-        ...userData 
-      } : null);
-      
-      if (userData.image && userData.image !== userImage) {
-        setUserImage(userData.image);
-      }
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-      setError('Failed to load user data. Please try again later.');
+  useEffect(() => {
+    if (user?.email) {
+      fetchUserData();
     }
-  }, [user?.email, userImage, apiUrl]);
+  }, [user?.email, fetchUserData]);
+
+  useEffect(() => {
+    fetchBalanceAndSyncNetwork();
+  }, [fetchBalanceAndSyncNetwork]);
 
   useEffect(() => {
     console.log('Current user state:', {
@@ -206,10 +356,11 @@ export default function AdminProfile() {
   }, [user]);
 
   useEffect(() => {
-    if (user?.email) {
-      fetchUserData();
+    if (fetcher.state === 'idle' && fetcher.data?.error) {
+      setError(fetcher.data.error);
+      setTimeout(() => setError(null), 3000);
     }
-  }, [user?.email, fetchUserData]);
+  }, [fetcher.state, fetcher.data]);
 
   const truncateKey = (key: string | null) => {
     if (!key) return '';
@@ -282,15 +433,6 @@ export default function AdminProfile() {
       });
       if (response.data?.message || response.data?.success) {
         updatePreferences({ currency: newPreferredCurrency });
-        setUser(prevUser => prevUser ? {
-          ...prevUser, 
-          preferences: {
-            hideBalances: prevUser.preferences?.hideBalances ?? false,
-            currency: newPreferredCurrency,
-            network: prevUser.preferences?.network ?? 'mainnet'
-          },
-          preferredCurrency: newPreferredCurrency 
-        } : null);
         setConfirmationMessage(`Preferred currency set to ${newPreferredCurrency}`);
         
         // Update the session
@@ -323,10 +465,6 @@ export default function AdminProfile() {
           });
           if (response.data.message === 'User image updated successfully') {
             setUserImage(base64Image);
-            setUser(prevUser => prevUser ? {
-              ...prevUser, 
-              image: base64Image 
-            } : null);
           }
         } catch (error) {
           console.error('Error updating user image:', error);
@@ -346,51 +484,6 @@ export default function AdminProfile() {
       return () => clearTimeout(timer);
     }
   }, [confirmationMessage]);
-
-  const handlePreferredNetworkChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const newNetwork = event.target.value;
-    if (!user?.email) return;
-    
-    try {
-      // Update local state immediately for UI responsiveness
-      setUser(prevUser => prevUser ? {
-        ...prevUser,
-        preferences: {
-          ...prevUser.preferences,
-          network: newNetwork
-        },
-        preferredNetwork: newNetwork
-      } : null);
-
-      // Update context
-      updatePreferences({ network: newNetwork });
-
-      // Store in localStorage
-      const storedPreferences = localStorage.getItem('userPreferences');
-      const parsedPreferences = storedPreferences ? JSON.parse(storedPreferences) : {};
-      localStorage.setItem('userPreferences', JSON.stringify({
-        ...parsedPreferences,
-        network: newNetwork,
-        preferredNetwork: newNetwork
-      }));
-
-      // Update backend and session through fetcher
-      fetcher.submit(
-        { preferredNetwork: newNetwork },
-        { method: "post" }
-      );
-
-      const networkOption = NETWORK_OPTIONS.find(opt => opt.value === newNetwork);
-      setNetworkChangeMessage(`Network changed to ${networkOption?.label}`);
-      
-      // Optionally reload the page after a short delay to ensure all states are updated
-      setTimeout(() => window.location.reload(), 1000);
-
-    } catch (error) {
-      console.error('Error updating network preference:', error);
-      setError(error instanceof Error ? error.message : 'Failed to update network preference');
-    }
-  };
 
   const renderPrivateKeySection = () => {
     if (!isClient) {
@@ -450,6 +543,25 @@ export default function AdminProfile() {
     );
   };
 
+  const handlePreferredNetworkChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newNetwork = event.target.value;
+    if (!user?.email) return;
+    
+    try {
+      const success = await syncNetworkPreference(newNetwork);
+      
+      if (success) {
+        const networkOption = NETWORK_OPTIONS.find(opt => opt.value === newNetwork);
+        setNetworkChangeMessage(`Network changed to ${networkOption?.label}`);
+        setTimeout(() => setNetworkChangeMessage(null), 3000);
+      }
+    } catch (error) {
+      console.error('Error updating network preference:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update network preference');
+      setTimeout(() => setError(null), 3000);
+    }
+  };
+
   if (!user) {
     return <div>Loading...</div>;
   }
@@ -487,8 +599,8 @@ export default function AdminProfile() {
               boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
             }}
           />
-          <h2 style={{ marginTop: '10px', color: '#333' }}>{loaderUser.name}</h2>
-          <p style={{ color: '#666' }}>{loaderUser.email}</p>
+          <h2 style={{ marginTop: '10px', color: '#333' }}>{user.name}</h2>
+          <p style={{ color: '#666' }}>{user.email}</p>
         </div>
       </div>
 
@@ -528,9 +640,9 @@ export default function AdminProfile() {
             }}>
               <input
                 type="checkbox"
-                checked={user?.preferences?.network !== 'mainnet'}
+                checked={user?.preferences?.network === 'mainnet'}
                 onChange={(e) => {
-                  const newNetwork = e.target.checked ? 'testnet' : 'mainnet';
+                  const newNetwork = e.target.checked ? 'mainnet' : 'testnet';
                   handlePreferredNetworkChange({ target: { value: newNetwork } } as React.ChangeEvent<HTMLSelectElement>);
                 }}
                 style={{
@@ -540,14 +652,17 @@ export default function AdminProfile() {
                 }}
               />
               <span 
-                className={`toggle-switch ${user?.preferences?.network !== 'mainnet' ? 'active' : ''}`}
+                className={`toggle-switch ${user?.preferences?.network === 'mainnet' ? 'active' : ''}`}
                 style={{
                   position: 'absolute',
                   cursor: 'pointer',
                   top: 0,
                   left: 0,
                   right: 0,
-                  bottom: 0
+                  bottom: 0,
+                  backgroundColor: user?.preferences?.network === 'mainnet' ? '#2196F3' : '#ccc',
+                  borderRadius: '34px',
+                  transition: '0.4s'
                 }}
               />
             </label>
@@ -650,13 +765,7 @@ export default function AdminProfile() {
               value={user.preferences?.currency || ''}
               onChange={(e) => {
                 if (user) {
-                  setUser({
-                    ...user,
-                    preferences: {
-                      ...user.preferences,
-                      currency: e.target.value
-                    }
-                  });
+                  updatePreferences({ currency: e.target.value });
                 }
               }}
               style={{ 

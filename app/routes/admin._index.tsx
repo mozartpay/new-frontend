@@ -1,10 +1,11 @@
 import { useOutletContext } from "@remix-run/react";
 import { motion } from 'framer-motion';
 import { useUser } from '~/context/UserContext';
-import { redirect, json, ActionFunctionArgs } from "@remix-run/node";
+import type { ActionFunctionArgs } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSubmit } from "@remix-run/react";
-import { getUserFromSession, updateUserPreferences } from '~/sessions/index';
+import { updateUserPreferences } from '~/sessions/index';
 import axios from 'axios';
 
 declare global {
@@ -37,12 +38,14 @@ type ContextType = {
 };
 
 // Add loader and action functions
-export async function action({ request }: ActionFunctionArgs) {
+export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const hideBalances = formData.get("hideBalances") === "true";
+  const network = formData.get("network") as string;
   
   const result = await updateUserPreferences(request, {
-    hideBalances
+    hideBalances,
+    ...(network && { network })
   });
 
   if (!result) {
@@ -52,7 +55,7 @@ export async function action({ request }: ActionFunctionArgs) {
   return json(result.user, {
     headers: result.headers
   });
-}
+};
 
 export default function AdminIndex() {
   const { balances, isLoading, cardVariants, loadingVariants } = useOutletContext<ContextType>();
@@ -63,6 +66,9 @@ export default function AdminIndex() {
   const navigate = useNavigate();
   const [hideBalances, setHideBalances] = useState(() => {
     return user?.preferences?.hideBalances ?? true;
+  });
+  const [network, setNetwork] = useState(() => {
+    return user?.preferences?.network || 'mainnet';
   });
   const [isMounted, setIsMounted] = useState(false);
   const submit = useSubmit();
@@ -84,6 +90,13 @@ export default function AdminIndex() {
     }
   }, [user?.preferences?.hideBalances]);
 
+  // Update network state when user preferences change
+  useEffect(() => {
+    if (user?.preferences?.network) {
+      setNetwork(user.preferences.network);
+    }
+  }, [user?.preferences?.network]);
+
   // Redirect to verification page if user's phone is not verified
   useEffect(() => {
     if (user && user.isPhoneVerified === false && window.location.pathname !== '/verification') {
@@ -91,12 +104,37 @@ export default function AdminIndex() {
     }
   }, [user, navigate]);
 
-  // Filter balances based on user's preferred currency
+  // Filter balances based on user's preferred currency and network
   const filteredBalances = useMemo(() => {
     if (!Array.isArray(balances)) return [];
-    if (!user?.preferences?.currency) return balances;
-    return balances.filter(balance => balance.asset_code === user.preferences.currency);
-  }, [balances, user?.preferences?.currency]);
+    
+    // First filter by network if available
+    let networkFilteredBalances = balances;
+    if (network) {
+      networkFilteredBalances = balances.filter(balance => {
+        // Add your network filtering logic here if needed
+        return true; // For now, return all balances
+      });
+    }
+    
+    // Then filter by currency if available
+    if (user?.preferences?.currency) {
+      return networkFilteredBalances.filter(balance => 
+        balance.asset_code === user.preferences.currency
+      );
+    }
+    
+    return networkFilteredBalances;
+  }, [balances, user?.preferences?.currency, network]);
+
+  // Handle network change
+  const handleNetworkChange = useCallback((newNetwork: string) => {
+    setNetwork(newNetwork);
+    updatePreferences({ network: newNetwork });
+    const formData = new FormData();
+    formData.append('network', newNetwork);
+    submit(formData, { method: 'post', replace: true });
+  }, [updatePreferences, submit]);
 
   // Initialize preferences from multiple sources
   useEffect(() => {
@@ -253,9 +291,7 @@ export default function AdminIndex() {
 
   return (
     <div className="admin-dashboard">
-      {user?.preferences?.currency && (
-        <p>Preferred Currency: {user.preferences.currency}</p>
-      )}
+      <h1 className="text-2xl font-bold mb-4">Admin Dashboard</h1>
 
       <h2>Your Balances</h2>
       <button 

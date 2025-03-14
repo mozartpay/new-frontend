@@ -57,21 +57,22 @@ export const action: ActionFunction = async ({ request }) => {
           }, { status: 500 });
         }
 
-        const hideBalances = data.user.preferences?.hideBalances ?? true;
-        const preferredNetwork = data.user.preferredNetwork || 'testnet';
+        // Get initial preferences with proper fallbacks
+        const preferences = {
+          hideBalances: data.user.preferences?.hideBalances ?? true,
+          currency: data.user.preferences?.currency ?? 'USD',
+          network: data.user.preferences?.network ?? 'testnet'
+        };
         
         // Update the backend with the initial preferences if not set
-        if (data.user.preferences?.hideBalances === undefined || !data.user.preferredNetwork) {
+        if (!data.user.preferences || Object.values(data.user.preferences).some(v => v === undefined)) {
           const preferencesResponse = await fetch(`${apiUrl}/profile/${data.user.email}/preferences`, {
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${data.token}`
             },
-            body: JSON.stringify({ 
-              hideBalances,
-              preferredNetwork
-            })
+            body: JSON.stringify(preferences)
           });
 
           if (!preferencesResponse.ok) {
@@ -86,16 +87,14 @@ export const action: ActionFunction = async ({ request }) => {
           token: data.token,
           preferences: {
             ...data.user.preferences,
-            hideBalances,
-            network: preferredNetwork
-          },
-          preferredNetwork
+            ...preferences
+          }
         };
 
         console.log('Creating user session with data:', { 
           userId: userSession.id,
           hasPreferences: !!userSession.preferences,
-          network: userSession.preferredNetwork
+          network: userSession.preferences.network
         });
 
         return createUserSession(JSON.stringify(userSession), '/admin');

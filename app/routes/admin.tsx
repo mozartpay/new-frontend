@@ -24,7 +24,9 @@ export const loader: LoaderFunction = async ({ request }) => {
   try {
     let balances: BalanceObj[] = [];
     let error: string | null = null;
-    let preferences = user.preferences || { 
+    
+    // Get stored preferences from the session
+    const storedPreferences = user.preferences || { 
       hideBalances: true, 
       currency: '', 
       network: user.preferredNetwork || 'testnet' 
@@ -32,9 +34,18 @@ export const loader: LoaderFunction = async ({ request }) => {
 
     if (user.email && user.token) {
       try {
-        // Get the network from user preferences, defaulting to testnet
-        const network = (user.preferences?.network || user.preferredNetwork || 'testnet') as any;
+        // Ensure we have the correct network preference
+        const network = storedPreferences.network || user.preferredNetwork || 'testnet';
+        
+        // Update user preferences with the confirmed network
+        user.preferences = {
+          ...storedPreferences,
+          network
+        };
+        user.preferredNetwork = network;
+
         const apiUrl = process.env.API_URL || '';
+        // Now fetch balances with the confirmed network
         const response = await getBalances(user.email, user.token, network, apiUrl);
         balances = response?.balances || [];
       } catch (balanceError: any) {
@@ -48,20 +59,23 @@ export const loader: LoaderFunction = async ({ request }) => {
     if (!apiUrl) {
       console.warn('API URL is not defined. Some features may not work correctly.');
     }
-    
-    return json({ 
-      user: {
-        ...user,
-        preferences
-      },
-      balances, 
-      apiUrl, 
-      token: user.token, 
+
+    return json({
+      user,
+      balances,
       error,
-      isLoading: false 
+      apiUrl,
+      cardVariants: {
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0 }
+      },
+      loadingVariants: {
+        hidden: { opacity: 0 },
+        visible: { opacity: 1 }
+      }
     });
   } catch (error) {
-    console.error("Error processing user data:", error);
+    console.error("Error in admin loader:", error);
     return redirect("/signin");
   }
 };

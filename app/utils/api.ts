@@ -51,30 +51,21 @@ function getValidApiUrl(network: Network, apiUrl?: string): string {
     return apiUrl;
   }
   
-  // Then try the network-specific config
-  const networkConfig = NETWORK_CONFIGS[network];
-  if (networkConfig?.apiUrl) {
-    return networkConfig.apiUrl;
-  }
-
-  // Finally try the environment variable
-  const envApiUrl = getEnvVar('API_URL');
-  if (envApiUrl && (envApiUrl.startsWith('http://') || envApiUrl.startsWith('https://'))) {
-    return envApiUrl;
-  }
-
-  // Fall back to default API URL
-  return 'https://mozart-api-21ea5fd801a8.herokuapp.com/api';
+  // Fallback to network-specific config
+  return NETWORK_CONFIGS[network].apiUrl;
 }
 
 export async function getBalances(email: string, token: string, network: Network, apiUrl?: string) {
+  // Ensure network is valid, default to testnet if not
+  const validNetwork: Network = (network === 'mainnet' || network === 'testnet') ? network : 'testnet';
+  
   try {
-    const baseUrl = getValidApiUrl(network, apiUrl);
-    console.log('API URL Config:', {
+    const baseUrl = getValidApiUrl(validNetwork, apiUrl);
+    console.log('Fetching balances with config:', {
       baseUrl,
       apiUrl,
-      network,
-      fullUrl: `${baseUrl}/user/balance`
+      network: validNetwork,
+      fullUrl: `${baseUrl}/user/balance/${encodeURIComponent(email)}?network=${validNetwork}`
     });
 
     const encodedEmail = encodeURIComponent(email);
@@ -87,26 +78,33 @@ export async function getBalances(email: string, token: string, network: Network
           'Authorization': `Bearer ${token}`
         },
         params: {
-          network
+          network: validNetwork
         },
         withCredentials: true
       }
     );
     
+    // Parse the response data if it's a string
+    const responseData = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+    
+    // Use the network from the response, fallback to validNetwork if not present
+    const responseNetwork = responseData.network || validNetwork;
+    
     console.log('Balance Response:', {
       status: response.status,
-      data: JSON.stringify(response.data, null, 2),
+      network: responseNetwork,
+      data: JSON.stringify(responseData, null, 2),
       url: response.config.url,
       params: response.config.params
     });
 
     // Ensure we always return an array of balances
-    const balances = response.data?.balances || [];
-    return { balances };
+    const balances = responseData?.balances || [];
+    return { balances, network: responseNetwork };
   } catch (error: any) {
     console.error('Error fetching balances:', error);
     if (error.response?.status === 404) {
-      return { balances: [] }; // Return empty balances for new accounts
+      return { balances: [], network: validNetwork };
     }
     throw new Error(error.response?.data?.error || 'Failed to fetch balances');
   }
