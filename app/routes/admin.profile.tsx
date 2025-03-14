@@ -492,7 +492,7 @@ export default function AdminProfile() {
 
     return (
       <div className="profile-section">
-        <h3>Private Key</h3>
+        <h3 style={{ margin: '0 0 5px 0', color: '#333' }}>Private Key</h3>
         <div className="key-container" style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
           <div style={{ flex: 1, position: 'relative' }}>
             <span style={{ 
@@ -624,7 +624,7 @@ export default function AdminProfile() {
             border: '1px solid #e9ecef'
           }}>
             <div>
-              <h3 style={{ margin: '0 0 5px 0' }}>Network</h3>
+              <h3 style={{ margin: '0 0 5px 0', color: '#333' }}>Network</h3>
               <div style={{ 
                 fontSize: '0.9em', 
                 color: '#666'
@@ -689,17 +689,17 @@ export default function AdminProfile() {
         </div>
 
         <div className="profile-section">
-          <h3>Profile Picture</h3>
-          <input type="file" accept="image/*" onChange={handleImageUpload} style={{ marginTop: '10px' }} />
+          <h3 style={{ margin: '0 0 5px 0', color: '#333' }}>Profile Picture</h3>
+          <input type="file" accept="image/*" onChange={handleImageUpload} style={{ marginTop: '10px', color: '#333' }} />
         </div>
 
         <div className="profile-section">
-          <h3>Public Key</h3>
+          <h3 style={{ margin: '0 0 5px 0', color: '#333' }}>Public Key</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
             {user?.preferences?.network === 'mainnet' ? (
               user?.publicKeyXlmMainnet ? (
                 <>
-                  <div style={{ flex: 1, padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px', fontFamily: 'monospace' }}>
+                  <div style={{ flex: 1, padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px', fontFamily: 'monospace', color: '#333' }}>
                     {truncateKey(user.publicKeyXlmMainnet)}
                   </div>
                   <button
@@ -709,7 +709,8 @@ export default function AdminProfile() {
                       backgroundColor: '#f8f9fa',
                       border: '1px solid #dee2e6',
                       borderRadius: '4px',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      color: '#333'
                     }}
                   >
                     Copy
@@ -723,7 +724,7 @@ export default function AdminProfile() {
             ) : (
               user?.publicKeyXlmTestnet ? (
                 <>
-                  <div style={{ flex: 1, padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px', fontFamily: 'monospace' }}>
+                  <div style={{ flex: 1, padding: '10px', backgroundColor: '#f0f0f0', borderRadius: '4px', fontFamily: 'monospace', color: '#333' }}>
                     {truncateKey(user.publicKeyXlmTestnet)}
                   </div>
                   <button
@@ -733,7 +734,8 @@ export default function AdminProfile() {
                       backgroundColor: '#f8f9fa',
                       border: '1px solid #dee2e6',
                       borderRadius: '4px',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      color: '#333'
                     }}
                   >
                     Copy
@@ -758,7 +760,7 @@ export default function AdminProfile() {
         {renderPrivateKeySection()}
 
         <div className="profile-section">
-          <h3>Preferred Currency</h3>
+          <h3 style={{ margin: '0 0 5px 0', color: '#333' }}>Preferred Currency</h3>
           <div style={{ display: 'flex', alignItems: 'center', marginTop: '10px' }}>
             <select
               name="preferredCurrency"
@@ -772,12 +774,14 @@ export default function AdminProfile() {
                 flex: 1,
                 padding: '10px',
                 borderRadius: '4px',
-                border: '1px solid #ccc'
+                border: '1px solid #ccc',
+                color: '#333',
+                backgroundColor: 'bg-gray-800 dark:bg-gray-800'
               }}
             >
               <option value="">Select a preferred currency</option>
               {DEFAULT_CURRENCIES.map((currency) => (
-                <option key={currency} value={currency}>
+                <option key={currency} value={currency} style={{ color: '#333', backgroundColor: '#fff' }}>
                   {currency}
                 </option>
               ))}

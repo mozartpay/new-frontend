@@ -1,26 +1,27 @@
-import { vitePlugin as remix } from "@remix-run/dev";
+import { vitePlugin } from "@remix-run/dev";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { netlifyPlugin } from "@netlify/remix-adapter/plugin";
 
 export default defineConfig({
   plugins: [
-    remix({
+    vitePlugin({
       ignoredRouteFiles: ["**/.*"],
       appDirectory: "app",
+      buildDirectory: "public/build",
       assetsBuildDirectory: "public/build",
-      serverBuildPath: "build/index.js",
       publicPath: "/build/",
+      serverBuildDirectory: "build"
     }),
     netlifyPlugin(),
     tsconfigPaths(),
   ],
   optimizeDeps: {
-    include: ['defindex-sdk']
+    include: []
   },
   build: {
     commonjsOptions: {
-      include: [/defindex-sdk/, /node_modules/],
+      include: [/node_modules/],
       transformMixedEsModules: true
     }
   },
@@ -28,5 +29,6 @@ export default defineConfig({
     fs: {
       strict: false
     }
-  }
+  },
+  assetsInclude: ['**/*.png', '**/*.jpg', '**/*.jpeg', '**/*.gif', '**/*.svg'],
 });

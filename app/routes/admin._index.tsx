@@ -290,10 +290,10 @@ export default function AdminIndex() {
   }, [user?.email, fetchUserData]);
 
   return (
-    <div className="admin-dashboard">
-      <h1 className="text-2xl font-bold mb-4">Admin Dashboard</h1>
+    <div className="admin-dashboard dark">
+      <h1 className="text-2xl font-bold mb-4 text-white">Admin Dashboard - Your Balances</h1>
 
-      <h2>Your Balances</h2>
+      <h2 className="text-2xl font-bold mb-4 text-white"></h2>
       <button 
         onClick={() => toggleBalanceVisibility(!hideBalances)}
         style={{
