@@ -172,6 +172,10 @@ export default function Swap() {
     }
   }>();
 
+  const [network, setNetwork] = useState<'testnet' | 'mainnet'>(() => {
+    const userNetwork = user?.preferences?.network;
+    return (userNetwork === 'testnet' || userNetwork === 'mainnet') ? userNetwork : 'testnet';
+  });
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -183,13 +187,60 @@ export default function Swap() {
   const apiUrl = ENV.API_URL;
   const token = user?.token;
 
-  const [formData, setFormData] = useState<SwapFormData>({
-    sourceAsset: ASSETS.XLM,
-    destinationAsset: ASSETS.USDC,
-    amount: '',
-    memo: '',
-    slippageTolerance: 1.0
+  // Update ASSETS based on network
+  const getAssets = (network: 'testnet' | 'mainnet') => ({
+    XLM: {
+      code: 'XLM',
+      issuer: undefined
+    },
+    USDC: {
+      code: 'USDC',
+      issuer: network === 'mainnet' ? ENV.CIRCLE_USDC_ISSUER_MAINNET : ENV.CIRCLE_USDC_ISSUER_TESTNET
+    },
+    EURC: {
+      code: 'EURC',
+      issuer: 'GDLKW2PQKYSXCXOXZ3IXCQKXKW4JQJQVNQXQXKJXXNVRM4QXRQFYI7H5'
+    }
   });
+
+  const [formData, setFormData] = useState<SwapFormData>(() => {
+    const currentAssets = getAssets(network);
+    return {
+      sourceAsset: currentAssets.XLM,
+      destinationAsset: currentAssets.USDC,
+      amount: '',
+      memo: '',
+      slippageTolerance: 1.0
+    };
+  });
+
+  // Handle network change
+  const handleNetworkChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newNetwork = event.target.value as 'testnet' | 'mainnet';
+    setNetwork(newNetwork);
+    setError(null);
+    setSuccess(null);
+    setEstimatedAmount('');
+    setExchangeRate(null);
+    
+    // Update assets with new network
+    const newAssets = getAssets(newNetwork);
+    setFormData(prev => ({
+      ...prev,
+      sourceAsset: newAssets[prev.sourceAsset.code as keyof typeof newAssets],
+      destinationAsset: newAssets[prev.destinationAsset.code as keyof typeof newAssets],
+    }));
+    
+    try {
+      setLoading(true);
+      await fetchBalances(newNetwork);
+    } catch (error) {
+      console.error('Error switching network:', error);
+      setError('Failed to switch network. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch balances when user or network changes
   useEffect(() => {
@@ -198,10 +249,11 @@ export default function Swap() {
     }
   }, [user?.email, user?.token, user?.preferences?.network]);
 
-  const fetchBalances = async () => {
+  // Update fetchBalances to accept network parameter
+  const fetchBalances = async (currentNetwork?: 'testnet' | 'mainnet') => {
     try {
       const response = await axios.get(
-        `${apiUrl}/api/user/balance/${encodeURIComponent(user.email)}`,
+        `${apiUrl}/user/balance/${encodeURIComponent(user.email)}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -209,7 +261,7 @@ export default function Swap() {
             'Accept': 'application/json'
           },
           params: {
-            network: user.preferences?.network || 'testnet'
+            network: currentNetwork || network
           },
           withCredentials: true
         }
@@ -547,7 +599,21 @@ export default function Swap() {
 
   return (
     <div className="swap-container" style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem' }}>
-      <h1 style={{ marginBottom: '2rem', textAlign: 'center' }}>Swap Assets</h1>
+      <div className="swap-header">
+        <h1 style={{ marginBottom: '2rem', textAlign: 'center' }}>Swap Assets</h1>
+        <div className="network-selector">
+          <label htmlFor="network">Network:</label>
+          <select
+            id="network"
+            value={network}
+            onChange={handleNetworkChange}
+            className="network-select"
+          >
+            <option value="testnet">Testnet</option>
+            <option value="mainnet">Mainnet</option>
+          </select>
+        </div>
+      </div>
 
       {error && (
         <div className="error-message" style={{ margin: '1rem 0', padding: '1rem', backgroundColor: '#ffe6e6', borderRadius: '4px' }}>
@@ -589,7 +655,7 @@ export default function Swap() {
             <select
               value={formData.destinationAsset.code}
               onChange={(e) => {
-                const selectedAsset = Object.values(ASSETS).find(
+                const selectedAsset = Object.values(getAssets(network)).find(
                   asset => asset.code === e.target.value
                 );
                 if (selectedAsset && selectedAsset.code !== formData.sourceAsset.code) {
@@ -610,7 +676,7 @@ export default function Swap() {
                 backgroundColor: 'white'
               }}
             >
-              {Object.values(ASSETS)
+              {Object.values(getAssets(network))
                 .filter(asset => asset.code !== formData.sourceAsset.code)
                 .map((asset) => (
                   <option key={asset.code} value={asset.code}>

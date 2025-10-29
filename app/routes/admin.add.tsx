@@ -314,13 +314,6 @@ export default function AdminAdd() {
   };
 
   const getTrustlineStatus = (currencyCode: string) => {
-    if (!stellarAccount?.[network]) {
-      return {
-        exists: false,
-        message: 'Create XLM account first'
-      };
-    }
-
     if (currencyCode === 'XLM') {
       const balance = getBalance('XLM');
       return {
@@ -329,8 +322,16 @@ export default function AdminAdd() {
       };
     }
 
-    const hasUSDC = stellarAccount[network].hasUSDCTrustline;
-    const hasEURC = stellarAccount[network].hasEURCTrustline;
+    const networkAccount = stellarAccount?.[network];
+    if (!networkAccount) {
+      return {
+        exists: false,
+        message: 'Account not found'
+      };
+    }
+
+    const hasUSDC = networkAccount.hasUSDCTrustline;
+    const hasEURC = networkAccount.hasEURCTrustline;
 
     if (currencyCode === 'USD') {
       const balance = getBalance('USDC');
@@ -368,8 +369,8 @@ export default function AdminAdd() {
     return false;
   };
 
-  const maskedPublicKey = stellarAccount?.[network]
-    ? `${stellarAccount?.[network].publicKey.slice(0, 10)}...${stellarAccount?.[network].publicKey.slice(-10)}`
+  const maskedPublicKey = stellarAccount?.[network]?.publicKey 
+    ? `${stellarAccount[network]?.publicKey?.slice(0, 10) || ''}...${stellarAccount[network]?.publicKey?.slice(-10) || ''}`
     : '';
 
   if (!user) {

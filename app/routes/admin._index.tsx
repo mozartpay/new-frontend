@@ -106,26 +106,35 @@ export default function AdminIndex() {
 
   // Filter balances based on user's preferred currency and network
   const filteredBalances = useMemo(() => {
-    if (!Array.isArray(balances)) return [];
+    if (!Array.isArray(balances)) {
+      return [];
+    }
     
     // First filter by network if available
     let networkFilteredBalances = balances;
-    if (network) {
-      networkFilteredBalances = balances.filter(balance => {
-        // Add your network filtering logic here if needed
-        return true; // For now, return all balances
-      });
-    }
     
-    // Then filter by currency if available
+    // Only apply currency filtering if user has explicitly set a currency preference
+    // AND there are balances that match that currency
     if (user?.preferences?.currency) {
-      return networkFilteredBalances.filter(balance => 
+      const currencyFilteredBalances = networkFilteredBalances.filter(balance => 
         balance.asset_code === user.preferences.currency
       );
+      
+      // Only use the filtered balances if we found some matches
+      if (currencyFilteredBalances.length > 0) {
+        return currencyFilteredBalances;
+      }
+      // Otherwise fall back to showing all balances
+      console.log('No balances found for currency:', user.preferences.currency);
     }
     
     return networkFilteredBalances;
   }, [balances, user?.preferences?.currency, network]);
+
+  // Add this effect to track when balances change
+  useEffect(() => {
+    console.log('Balances changed:', balances);
+  }, [balances]);
 
   // Handle network change
   const handleNetworkChange = useCallback((newNetwork: string) => {
@@ -328,39 +337,45 @@ export default function AdminIndex() {
         </motion.div>
       ) : (
         <div className="balance-grid">
-          {filteredBalances.map((balance, index) => (
-            <motion.div
-              key={index}
-              className="balance-card"
-              initial="hidden"
-              animate="visible"
-              transition={{ duration: 0.5, delay: index * 0.2 }}
-              variants={cardVariants}
-              style={{
-                backgroundColor: '#f3f4f6',
-                borderRadius: '8px',
-                padding: '20px',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                minHeight: '150px',
-              }}
-            >
-              <h3 style={{ margin: '0 0 10px 0', color: '#4b5563' }}>Balance ({balance.asset_code})</h3>
-              <p style={{ 
-                fontSize: '1.5rem', 
-                fontWeight: 'bold', 
-                margin: 0,
-                color: '#1f2937',
-                filter: hideBalances ? 'blur(8px)' : 'none',
-                userSelect: hideBalances ? 'none' : 'auto'
-              }}>
-                {balance.asset_code} {parseFloat(balance.balance).toFixed(7)}
-              </p>
-            </motion.div>
-          ))}
+          {filteredBalances.length > 0 ? (
+            filteredBalances.map((balance, index) => (
+              <motion.div
+                key={index}
+                className="balance-card"
+                initial="hidden"
+                animate="visible"
+                transition={{ duration: 0.5, delay: index * 0.2 }}
+                variants={cardVariants}
+                style={{
+                  backgroundColor: '#f3f4f6',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: '150px',
+                }}
+              >
+                <h3 style={{ margin: '0 0 10px 0', color: '#4b5563' }}>Balance ({balance.asset_code})</h3>
+                <p style={{ 
+                  fontSize: '1.5rem', 
+                  fontWeight: 'bold', 
+                  margin: 0,
+                  color: '#1f2937',
+                  filter: hideBalances ? 'blur(8px)' : 'none',
+                  userSelect: hideBalances ? 'none' : 'auto'
+                }}>
+                  {balance.asset_code} {parseFloat(balance.balance).toFixed(7)}
+                </p>
+              </motion.div>
+            ))
+          ) : (
+            <div className="no-balances">
+              <p>No balances to display. {Array.isArray(balances) ? `Found ${balances.length} balances before filtering.` : 'Balances data is not available.'}</p>
+            </div>
+          )}
         </div>
       )}
     </div>

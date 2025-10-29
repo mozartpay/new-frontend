@@ -6,6 +6,7 @@ import { getUserFromSession } from '~/sessions/index';
 import { useUser } from '~/context/UserContext';
 import { User } from '~/types/user';
 import "~/styles/admin.css";
+import { motion } from 'framer-motion';
 
 interface CurrencySymbols {
   [key: string]: string;
@@ -67,14 +68,30 @@ export default function AdminSend() {
   const [receiverEmail, setReceiverEmail] = useState('');
   const [receiverName, setReceiverName] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const [balances, setBalances] = useState<{ [key: string]: string }>({});
+  const [network, setNetwork] = useState<'testnet' | 'mainnet'>(() => {
+    const userNetwork = loaderUser?.preferences?.network;
+    return (userNetwork === 'testnet' || userNetwork === 'mainnet') ? userNetwork : 'testnet';
+  });
+  const [balances, setBalances] = useState<{ [key: string]: { [currency: string]: string } }>({
+    testnet: {},
+    mainnet: {}
+  });
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
   const [balanceError, setBalanceError] = useState<string>('');
-  const [amountError, setAmountError] = useState<string>('');
+  const [amountError, setAmountError] = useState<string | null>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState('');
   const navigate = useNavigate();
   const { user, setUser } = useUser();
+
+  const loadingVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1 },
+  };
+
+  const getAvailableCurrencies = () => {
+    return Object.entries(balances[network] || {});
+  };
 
   useEffect(() => {
     if (!loaderUser) {
@@ -103,37 +120,57 @@ export default function AdminSend() {
     }
   }, [user]);
 
-  const fetchBalances = async () => {
+  const handleNetworkChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newNetwork = event.target.value as 'testnet' | 'mainnet';
+    setNetwork(newNetwork);
+    setSourceCurrency(''); // Reset currency selection
+    setAmountError(null);
+    
     try {
-      if (!user?.email) return;
+      setIsLoadingBalances(true);
+      await fetchBalances(newNetwork);
+    } catch (error) {
+      console.error('Error switching network:', error);
+      setBalanceError('Failed to switch network. Please try again.');
+    } finally {
+      setIsLoadingBalances(false);
+    }
+  };
+
+  const fetchBalances = async (currentNetwork?: string) => {
+    try {
+      if (!user?.email || !token) return;
       
       setIsLoadingBalances(true);
       setBalanceError('');
 
-      const response = await axios.get(
-        `${apiUrl}/api/user/balance/${encodeURIComponent(user.email)}`,
-        { 
-          headers: { 
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          params: {
-            network: user.preferences?.network || 'testnet'
-          },
-          withCredentials: true
-        }
-      );
+      const networkToUse = currentNetwork || network;
+      const response = await axios({
+        method: 'get',
+        url: `${apiUrl}/user/balance/${encodeURIComponent(user.email)}`,
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        params: {
+          network: networkToUse
+        },
+        withCredentials: true
+      });
       
       const apiBalances = response.data.balances || [];
-      const formattedBalances: { [key: string]: string } = {};
+      const formattedBalances: { [currency: string]: string } = {};
       
       apiBalances.forEach((balance: any) => {
         const currency = balance.asset_code || 'XLM';
         formattedBalances[currency] = balance.balance;
       });
 
-      setBalances(formattedBalances);
+      setBalances(prev => ({
+        ...prev,
+        [networkToUse]: formattedBalances
+      }));
     } catch (error) {
       console.error('Error fetching balances:', error);
       setBalanceError('Failed to fetch balances. Please try again.');
@@ -144,6 +181,16 @@ export default function AdminSend() {
       setIsLoadingBalances(false);
     }
   };
+
+  const getCurrentBalance = (currency: string): string => {
+    return balances[network]?.[currency] || '0';
+  };
+
+  useEffect(() => {
+    if (user?.email && token) {
+      fetchBalances();
+    }
+  }, [user?.email, token, network]);
 
   const validateInputs = (): string | null => {
     if (!receiverEmail.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
@@ -163,7 +210,7 @@ export default function AdminSend() {
       return 'Amount exceeds maximum transfer limit';
     }
 
-    const sourceBalance = parseFloat(balances[sourceCurrency] || '0');
+    const sourceBalance = parseFloat(getCurrentBalance(sourceCurrency) || '0');
     if (numAmount > sourceBalance) {
       return 'Insufficient funds';
     }
@@ -198,7 +245,7 @@ export default function AdminSend() {
           amount: amount.toString(),
           receiverEmail,
           receiverName,
-          network: user.preferences?.network || 'testnet'
+          network: network
         },
         {
           headers: {
@@ -242,6 +289,8 @@ export default function AdminSend() {
 
   const handleCurrencyChange = (event: React.ChangeEvent<HTMLSelectElement>): void => {
     setSourceCurrency(event.target.value);
+    setAmount('');
+    setAmountError('');
   };
 
   const handleCloseSuccessModal = () => {
@@ -261,30 +310,74 @@ export default function AdminSend() {
       <h1>Send Money</h1>
       
       <div className="form-group">
-        <label htmlFor="currency">Select currency to send:</label>
-        <select id="currency" value={sourceCurrency} onChange={handleCurrencyChange}>
-          {Object.keys(balances).map((key) => (
-            <option key={key} value={key}>{key}</option>
+        <label htmlFor="network" className="block text-sm font-medium text-gray-700 mb-2">
+          Network
+        </label>
+        <select
+          id="network"
+          value={network}
+          onChange={handleNetworkChange}
+          className="w-full p-2 border border-gray-300 rounded-md"
+        >
+          <option value="testnet">Testnet</option>
+          <option value="mainnet">Mainnet</option>
+        </select>
+      </div>
+
+      <div className="form-group">
+        <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-2">
+          Select currency to send:
+        </label>
+        <select
+          id="currency"
+          value={sourceCurrency}
+          onChange={handleCurrencyChange}
+          className="w-full p-2 border border-gray-300 rounded-md"
+        >
+          <option value="">Select a currency</option>
+          {Object.entries(balances[network] || {}).map(([code, balance]) => (
+            <option key={code} value={code}>
+              {code} ({parseFloat(balance).toFixed(7)})
+            </option>
           ))}
         </select>
       </div>
 
       {sourceCurrency && (
-        <p className="balance-info">
-          Current {sourceCurrency} Balance: {currencySymbols[sourceCurrency]}{balances[sourceCurrency] || '0.00'}
+        <p className="balance-info text-sm text-gray-600 mt-2">
+          Current {sourceCurrency} Balance: {getCurrentBalance(sourceCurrency) ? 
+            `${currencySymbols[sourceCurrency]}${parseFloat(getCurrentBalance(sourceCurrency)).toFixed(7)}` : 
+            `${currencySymbols[sourceCurrency]}0.0000000`
+          }
         </p>
       )}
 
       {isLoadingBalances && (
-        <p>Loading balances...</p>
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={loadingVariants}
+          className="text-sm text-gray-600 mt-2"
+        >
+          <p>Loading balances...</p>
+        </motion.div>
       )}
 
       {balanceError && (
-        <p className="error">{balanceError}</p>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          className="error text-sm text-red-600 mt-2"
+        >
+          <p>{balanceError}</p>
+        </motion.div>
       )}
 
       <div className="form-group">
-        <label htmlFor="amount">Amount to send:</label>
+        <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-2">
+          Amount to send:
+        </label>
         <div className="input-group">
           <span className="input-group-text">{currencySymbols[sourceCurrency]}</span>
           <input
@@ -299,7 +392,9 @@ export default function AdminSend() {
       </div>
 
       <div className="form-group">
-        <label htmlFor="receiverName">Receiver Name:</label>
+        <label htmlFor="receiverName" className="block text-sm font-medium text-gray-700 mb-2">
+          Receiver Name:
+        </label>
         <input
           type="text"
           id="receiverName"
@@ -311,7 +406,9 @@ export default function AdminSend() {
       </div>
 
       <div className="form-group">
-        <label htmlFor="receiverEmail">Receiver Email:</label>
+        <label htmlFor="receiverEmail" className="block text-sm font-medium text-gray-700 mb-2">
+          Receiver Email:
+        </label>
         <input
           type="email"
           id="receiverEmail"

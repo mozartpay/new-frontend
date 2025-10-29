@@ -137,9 +137,26 @@ export default function AdminWithdraw() {
 
   useEffect(() => {
     if (user && user.email) {
-      // fetchBalances();
+      fetchBalances();
     }
   }, [user]);
+
+  const fetchBalances = async () => {
+    if (!user?.email || !token) return;
+    
+    try {
+      setLoading(true);
+      const response = await getBalances(user.email, token, network as Network, network);
+      if (response.balances) {
+        setBalances(response.balances);
+      }
+    } catch (error) {
+      console.error('Error fetching balances:', error);
+      setError('Failed to fetch balances');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAmountChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
@@ -193,10 +210,39 @@ export default function AdminWithdraw() {
     setCarbonCreditsEnabled(enabled);
   };
 
-  const handleNetworkChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    setNetwork(event.target.value as 'testnet' | 'mainnet');
+  const handleNetworkChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const newNetwork = event.target.value as 'testnet' | 'mainnet';
+    setNetwork(newNetwork);
+    setCurrency(''); // Reset currency selection
     setError(null);
+    
+    // Reset carbon credits
+    setCarbonCreditsEnabled(false);
+    setShowCarbonCreditsOption(false);
+    
+    // Reset amount
+    setAmount('');
+    
+    // Fetch new balances for the selected network
+    try {
+      setLoading(true);
+      const response = await getBalances(user?.email || '', token, newNetwork as Network, newNetwork);
+      if (response.balances) {
+        setBalances(response.balances);
+      }
+    } catch (error) {
+      console.error('Error fetching balances for new network:', error);
+      setError('Failed to fetch balances for the selected network');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    if (user?.email && token) {
+      fetchBalances();
+    }
+  }, [network, user?.email]);
 
   const handleWithdrawClick = async () => {
     console.log('Withdraw button clicked with:', {

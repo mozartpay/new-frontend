@@ -14,6 +14,13 @@
   font-size: 1.75rem;
 }
 
+.swap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
 .swap-section {
   display: flex;
   flex-direction: column;
@@ -109,6 +116,38 @@
 .slippage-tolerance,
 .memo-field {
   margin-bottom: 1rem;
+}
+
+.network-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.network-selector label {
+  font-weight: 500;
+  color: var(--text-color, #4a5568);
+}
+
+.network-select {
+  padding: 0.5rem;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 6px;
+  background-color: white;
+  color: var(--text-color, #2d3748);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.network-select:hover {
+  border-color: var(--primary-color, #4299e1);
+}
+
+.network-select:focus {
+  outline: none;
+  border-color: var(--primary-color, #4299e1);
+  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.2);
 }
 
 .swap-button {

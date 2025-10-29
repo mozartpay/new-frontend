@@ -36,7 +36,17 @@ export default function Nav({ isDarkMode, onToggleDarkMode }: NavProps) {
 
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault();
-    logout();
+    try {
+      // Use fetcher to submit a logout form action instead of just calling logout()
+      fetcher.submit({}, { method: "post", action: "/logout" });
+      
+      // The client-side logout function should still be called to clear local state
+      logout();
+      
+      // No need to navigate manually, the server response should handle redirection
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   const MobileNav = () => (

@@ -6,7 +6,7 @@ export type User = {
   contractId?: string;
   preferredCurrency?: string;
   isAuthorized: boolean;
-  isPhoneVerified?: boolean;
+  isPhoneVerified: boolean;
   image?: string;
   preferredNetwork?: string;
   token: string;

@@ -8,10 +8,8 @@ export default defineConfig({
     vitePlugin({
       ignoredRouteFiles: ["**/.*"],
       appDirectory: "app",
-      buildDirectory: "public/build",
-      assetsBuildDirectory: "public/build",
-      publicPath: "/build/",
-      serverBuildDirectory: "build"
+      // Use a completely different build directory structure
+      buildDirectory: "dist"
     }),
     netlifyPlugin(),
     tsconfigPaths(),
@@ -20,6 +18,8 @@ export default defineConfig({
     include: []
   },
   build: {
+    // Set a completely different output directory
+    outDir: "build",
     commonjsOptions: {
       include: [/node_modules/],
       transformMixedEsModules: true

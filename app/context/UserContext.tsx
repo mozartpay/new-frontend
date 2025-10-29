@@ -6,7 +6,7 @@ interface User {
   token: string;
   isAuthorized: boolean;
   isPhoneVerified: boolean;
-  preferences: {
+  preferences?: {
     hideBalances: boolean;
     currency: string;
     network: string;
@@ -93,15 +93,19 @@ export const UserProvider: React.FC<{ children: ReactNode; initialUser: User | n
   };
 
   const updatePreferences = (preferences: Partial<User['preferences']>) => {
-    setUser(prevUser => 
-      prevUser ? {
+    setUser(prevUser => {
+      if (!prevUser) return null;
+      
+      return {
         ...prevUser,
         preferences: {
-          ...prevUser.preferences,
+          hideBalances: prevUser.preferences?.hideBalances ?? false,
+          currency: prevUser.preferences?.currency ?? 'USD',
+          network: prevUser.preferences?.network ?? 'mainnet',
           ...preferences
         }
-      } : null
-    );
+      };
+    });
   };
 
   return (

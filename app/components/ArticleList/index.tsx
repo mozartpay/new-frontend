@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
-import ArticleItem from '../ArticleItem';
 import { BlogTags, BlogAuthor } from '../../routes/blog';
 import '../../styles/blog.css';
+import fb from '../../assets/img/blog/fb.png';
 
 const ArticleList = () => (
    
@@ -73,6 +73,30 @@ const ArticleList = () => (
             </a>
             <p>Discover smart contract-managed payments to streamline global transactions for businesses...</p>
             <BlogAuthor name="Mozart Team" date={new Date('2024-02-04T19:01:27Z')} />
+          </div>
+        </div>
+      </div>
+      <div className="card" style={{ display: 'inline-block' }}>
+        <div className="article">
+          <div className="article-image" style={{ width: '50%' }}>
+            <a href="/blog/building-the-future-of-secure-blockchain-payments" className="custom-link">
+              <motion.img
+                src={fb}
+                alt="some text"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                style={{ width: '100%' }}
+              />
+            </a>
+          </div>
+          <div className="article-content" style={{ textAlign: 'justify' }}>
+            <BlogTags tags={['Financial Protocol', 'Web3 Payments']} />
+            <a href="/blog/building-the-future-of-secure-blockchain-payments" className="custom-link">
+              <h2 className="title-limit">Mozartpay and Fireblocks: Building the Future of Secure Blockchain Payments              </h2>
+            </a>
+            <p>Reimagining cross-border payments by harnessing the transformative power of blockchain technology...</p>
+            <BlogAuthor name="Mozart Team" date={new Date('2025-10-28T19:01:27Z')} />
           </div>
         </div>
       </div>
