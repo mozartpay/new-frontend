@@ -383,3 +383,35 @@ export async function submitTransaction(
     throw error;
   }
 }
+
+export interface BluechipGradeResponse {
+  name: string;
+  symbol: string;
+  grade: string;
+  url: string;
+}
+
+export async function getBluechipGrade(coin: string): Promise<BluechipGradeResponse> {
+  try {
+    console.log('Making Bluechip API call for:', coin);
+    const response = await axios.get(
+      `https://backend.bluechip.org/api/1.2/coins/${coin}/grade`,
+      {
+        headers: {
+          'accept': '*/*',
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      }
+    );
+    
+    console.log('Bluechip API response received:', response.data);
+    return response.data;
+  } catch (error: any) {
+    console.error('Error fetching Bluechip grade:', error);
+    if (error.code === 'ERR_NETWORK') {
+      console.error('Network error - possibly CORS issue');
+    }
+    throw error;
+  }
+}

@@ -8,7 +8,7 @@ import axios from 'axios';
 import "~/styles/admin.css";
 import "~/styles/payment-method.css";
 import { User } from '~/types/user';
-import { getBalances, createTrustline, createXLMAccount, getStellarAccount, Network } from '~/utils/api';
+import { getBalances, createTrustline, createXLMAccount, getStellarAccount, Network, getBluechipGrade, BluechipGradeResponse } from '~/utils/api';
 import USDCImage from '~/assets/img/dashboards/USDC.png';
 import EURCImage from '~/assets/img/dashboards/EURC.png';
 import XLMImage from '~/assets/img/dashboards/XLM.png';
@@ -135,6 +135,8 @@ export default function AdminAdd() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
+  const [bluechipData, setBluechipData] = useState<BluechipGradeResponse | null>(null);
+  const [bluechipLoading, setBluechipLoading] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -145,6 +147,27 @@ export default function AdminAdd() {
       navigate('/signin');
     }
   }, [user, navigate]);
+
+  const fetchBluechipData = useCallback(async () => {
+    console.log('Fetching Bluechip data...');
+    setBluechipLoading(true);
+    try {
+      const data = await getBluechipGrade('USDC');
+      console.log('Bluechip API response:', data);
+      setBluechipData(data);
+    } catch (error: any) {
+      console.error('Failed to fetch Bluechip grade:', error);
+      // Set fallback data in case of API failure
+      setBluechipData({
+        name: 'Circle',
+        symbol: 'USDC',
+        grade: 'B+',
+        url: 'https://bluechip.org/coins/usdc'
+      });
+    } finally {
+      setBluechipLoading(false);
+    }
+  }, []);
 
   const fetchUserData = useCallback(async () => {
     if (!user?.email || !token) return;
@@ -181,6 +204,7 @@ export default function AdminAdd() {
   useEffect(() => {
     if (user?.email && isClient) {
       fetchUserData();
+      fetchBluechipData();
     }
   }, [user?.email, isClient, network, fetchUserData]);
 
@@ -534,9 +558,37 @@ export default function AdminAdd() {
                           {status.message}
                         </span>
                         {code === 'USD' && (
-                          <p className="text-xs text-gray-500 mt-1">
-                            Powered by USDC stablecoin
-                          </p>
+                          <div className="bluechip-info">
+                            <div className="bluechip-header">
+                              <img 
+                                src="https://pbs.twimg.com/profile_images/2009140889407639555/ENhjV--L_400x400.jpg" 
+                                alt="Bluechip" 
+                                className="bluechip-logo"
+                              />
+                              <div className="bluechip-score">
+                                {bluechipLoading ? (
+                                  <span className="loading-score">Loading...</span>
+                                ) : bluechipData ? (
+                                  <div>
+                                    <span className="grade-label">Bluechip Grade:</span>
+                                    <span className="grade-value">{bluechipData.grade}</span>
+                                  </div>
+                                ) : (
+                                  <span className="loading-score">No data available</span>
+                                )}
+                              </div>
+                            </div>
+                            {bluechipData && (
+                              <a 
+                                href={bluechipData.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="bluechip-details-link"
+                              >
+                                See more details →
+                              </a>
+                            )}
+                          </div>
                         )}
                       </div>
                     );

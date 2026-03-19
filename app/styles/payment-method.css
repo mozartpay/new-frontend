@@ -240,3 +240,68 @@
   margin: 16px 0;
   font-size: 0.95rem;
 }
+
+/* Bluechip Integration Styles */
+.bluechip-info {
+  margin-top: 8px;
+  padding: 8px;
+  background: #f5f5f5;
+  border-radius: 6px;
+  border-left: 3px solid #2196F3;
+}
+
+.bluechip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.bluechip-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.bluechip-score {
+  flex: 1;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.grade-label {
+  font-weight: 500;
+  color: #666;
+}
+
+.grade-value {
+  font-weight: 600;
+  color: #2196F3;
+  margin-left: 4px;
+}
+
+.score-value {
+  color: #666;
+  font-size: 0.8rem;
+  margin-left: 2px;
+}
+
+.loading-score {
+  color: #999;
+  font-style: italic;
+}
+
+.bluechip-details-link {
+  display: inline-block;
+  color: #2196F3;
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.bluechip-details-link:hover {
+  color: #1976D2;
+  text-decoration: underline;
+}
